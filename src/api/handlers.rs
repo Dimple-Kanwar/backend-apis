@@ -29,15 +29,13 @@ async fn transfer(
     }
 }
 
-#[get("/wallet/{chain_id}/{address}")]
+#[get("/chain/{chain_id}/wallet/{address}")]
 async fn get_wallet(params: web::Path<(u64,String)>) -> impl Responder {
-    println!("//get wallet");
     let params = params.into_inner();
     let address = params.1;
     let chai_id = params.0;
-    println!("address {}", address);
-    println!("chai_id {}", chai_id);
-    // let parsed_chain_id = "80084".parse::<u64>().unwrap();
+    // println!("address {}", address);
+    // println!("chai_id {}", chai_id);
     let wallet_service = WalletService;
     match wallet_service.get_wallet(&address, chai_id).await {
         Ok(wallet) => HttpResponse::Ok().json(wallet),

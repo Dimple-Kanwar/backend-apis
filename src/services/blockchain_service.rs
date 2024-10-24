@@ -252,6 +252,7 @@ impl BlockchainClient {
             1 => "ETH",
             137 => "MATIC",
             56 => "BNB",
+            80084 => "BERA",
             // Add more chains as needed
             _ => "ETH",
         };

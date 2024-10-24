@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: Uuid,
@@ -18,4 +17,14 @@ pub enum TransactionStatus {
     Pending,
     Completed,
     Failed,
+}
+
+
+#[derive(Deserialize)]
+pub struct TransactionRequest {
+    pub from_address: String,
+    pub to_address: String,
+    pub amount: f64,
+    pub token_address: String,
+    pub chain_id: u64
 }

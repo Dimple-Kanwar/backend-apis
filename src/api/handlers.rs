@@ -1,30 +1,26 @@
 use actix_web::{post, get, web, HttpResponse, Responder};
-use serde::Deserialize;
+
 
 // use crate::models::transaction::Transaction;
-use crate::services::{transaction_service::TransactionService, wallet_service::WalletService};
-
-#[derive(Deserialize)]
-pub struct TransactionRequest {
-    from_address: String,
-    to_address: String,
-    amount: f64,
-    token_address: String,
-}
+use crate::{
+    models::transaction::TransactionRequest, 
+    services::{blockchain_service::BlockchainClient, transaction_service::TransactionService, wallet_service::{self, WalletService}}
+};
 
 #[post("/transfer")]
-async fn create_transaction(
+async fn transfer(
     transaction_req: web::Json<TransactionRequest>,
 ) -> impl Responder {
-    let wallet_service = WalletService;
-    let transaction_service = TransactionService::new(wallet_service);
+    // let wallet_service = WalletService;
+    let transaction_service = TransactionService;
 
     match transaction_service
-        .create_transaction(
-            transaction_req.from_address.clone(),
-            transaction_req.to_address.clone(),
+        .send_transaction(
+            &transaction_req.from_address.clone(),
+            &transaction_req.to_address.clone(),
             transaction_req.amount,
-            transaction_req.token_address.clone(),
+            &transaction_req.token_address.clone(),
+            transaction_req.chain_id
         )
         .await
     {
@@ -33,11 +29,17 @@ async fn create_transaction(
     }
 }
 
-#[get("/wallets/{address}")]
-async fn get_wallet(address: web::Path<String>) -> impl Responder {
+#[get("/wallet/{chain_id}/{address}")]
+async fn get_wallet(params: web::Path<(u64,String)>) -> impl Responder {
+    println!("//get wallet");
+    let params = params.into_inner();
+    let address = params.1;
+    let chai_id = params.0;
+    println!("address {}", address);
+    println!("chai_id {}", chai_id);
+    // let parsed_chain_id = "80084".parse::<u64>().unwrap();
     let wallet_service = WalletService;
-    
-    match wallet_service.get_wallet(&address).await {
+    match wallet_service.get_wallet(&address, chai_id).await {
         Ok(wallet) => HttpResponse::Ok().json(wallet),
         Err(e) => HttpResponse::NotFound().body(e.to_string()),
     }

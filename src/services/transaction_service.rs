@@ -25,7 +25,7 @@ impl TransactionService {
         let native_balance = client.get_native_balance(from_address).await?;
         
         if  native_balance.formatted_balance.parse::<f64>().unwrap()  < amount {
-            return Err(CustomError::InsufficientFunds);
+            return Err(CustomError::InsufficientFundsError);
         }
 
         // Create transaction

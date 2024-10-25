@@ -14,12 +14,14 @@ pub struct WalletService;
 
 impl WalletService {
     
-    pub async fn get_wallet(&self, address: &str, chain_id: u64) -> Result<TokenBalance, CustomError> {
+    pub async fn get_wallet(&self, address: &str, chain_id: u64) -> Result<Vec<TokenBalance>, CustomError> {
         // Implementation would typically interact with a database
         // This is a mock implementation
         let client = BlockchainClient::new(chain_id).await?;
         let native_balance = client.get_native_balance(address).await?;
-        Ok(native_balance)
+        let mut data = vec![];
+        data.push(native_balance);
+        Ok(data)
     }
 
     // Convert balance from Wei to Ether

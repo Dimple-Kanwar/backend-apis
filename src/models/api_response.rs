@@ -1,12 +1,24 @@
-use serde::{Serialize,Deserialize};
-use std::{any::Any, fmt::Debug};
+use actix_web::HttpResponse;
+use serde::Serialize;
 
-use super::token::TokenBalance;
+use crate::errors::ApiError;
 
-#[derive(serde::Serialize)]
-pub struct ApiResponse {
+// Generic API Response wrapper
+#[derive(Debug, Serialize)]
+pub struct ApiResponse<T> {
     pub status: String,
-    pub code: String,
-    pub message: String,
-    pub result: Vec<(TokenBalance, String)>
+    pub code: u16,
+    pub result: Option<T>,
+    pub error: Option<ApiError>
+}
+
+
+// Success response helper
+pub fn success_response<T: Serialize>(data: T) -> HttpResponse {
+    HttpResponse::Ok().json(ApiResponse {
+        status: "SUCCESS".to_string(),
+        code: 200,
+        result: Some(data),
+        error: None,
+    })
 }

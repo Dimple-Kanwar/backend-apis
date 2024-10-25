@@ -76,7 +76,7 @@ impl BlockchainClient {
         wallet_address: &str,
     ) -> Result<TokenBalance, CustomError> {
         let address = Address::from_str(wallet_address)
-            .map_err(|_| CustomError::InvalidAddress(wallet_address.to_string()))?;
+            .map_err(|_| CustomError::InvalidAddressError(wallet_address.to_string()))?;
 
         let balance = self
             .provider
@@ -111,10 +111,10 @@ impl BlockchainClient {
         wallet_address: &str,
     ) -> Result<TokenBalance, CustomError> {
         let token_address = Address::from_str(token_address)
-            .map_err(|_| CustomError::InvalidAddress(token_address.to_string()))?;
+            .map_err(|_| CustomError::InvalidAddressError(token_address.to_string()))?;
 
         let wallet_address = Address::from_str(wallet_address)
-            .map_err(|_| CustomError::InvalidAddress(wallet_address.to_string()))?;
+            .map_err(|_| CustomError::InvalidAddressError(wallet_address.to_string()))?;
 
         // Create contract instance
         let contract = Contract::new(
@@ -211,7 +211,7 @@ impl BlockchainClient {
     /// Get transaction count (nonce) for an address
     pub async fn get_transaction_count(&self, address: &str) -> Result<U256, CustomError> {
         let address = Address::from_str(address)
-            .map_err(|_| CustomError::InvalidAddress(address.to_string()))?;
+            .map_err(|_| CustomError::InvalidAddressError(address.to_string()))?;
 
         self.provider
             .get_transaction_count(address, None)

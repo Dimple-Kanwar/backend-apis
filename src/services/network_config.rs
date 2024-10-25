@@ -42,6 +42,6 @@ pub fn get_network_config(chain_id: u64) -> Result<NetworkConfig, CustomError> {
             symbol: "BERA".to_string(),
             block_explorer: "https://bartio.beratrail.io".to_string(),
         }),
-        _ => Err(CustomError::UnsupportedChain(chain_id)),
+        _ => Err(CustomError::UnsupportedChainError(chain_id)),
     }
 }

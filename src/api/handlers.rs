@@ -23,8 +23,8 @@ async fn transfer(
         )
         .await
     {
-        Ok(transaction) => HttpResponse::Created().json(transaction),
-        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+        Ok(transaction) => Ok(success_response(transaction)),
+        Err(e) => Err(e),
     }
 }
 

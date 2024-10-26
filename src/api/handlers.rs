@@ -11,15 +11,14 @@ use crate::{
 async fn transfer(
     transaction_req: web::Json<TransactionRequest>,
 ) -> impl Responder {
-    // let wallet_service = WalletService;
     let transaction_service = TransactionService;
-
+  
     match transaction_service
-        .send_transaction(
+        .transfer_token(
             &transaction_req.from_address.clone(),
+            &transaction_req.token_address.clone(),
             &transaction_req.to_address.clone(),
             transaction_req.amount,
-            &transaction_req.token_address.clone(),
             transaction_req.chain_id
         )
         .await

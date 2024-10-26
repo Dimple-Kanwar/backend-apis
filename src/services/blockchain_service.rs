@@ -1,9 +1,5 @@
 use ethers::{
-    abi::AbiParser,
-    contract::Contract,
-    core::types::{Address, U256},
-    providers::{Http, Middleware, Provider},
-    types::U64,
+    abi::AbiParser, contract::{abigen, Contract}, core::types::{Address, U256}, middleware::SignerMiddleware, providers::{Http, Middleware, Provider}, signers::{LocalWallet, Signer}, types::{TransactionReceipt, H160, U64}
 };
 use std::{str::FromStr, sync::Arc};
 
@@ -36,12 +32,22 @@ const ERC20_ABI: &str = r#"[
         "name": "symbol",
         "outputs": [{"name": "", "type": "string"}],
         "type": "function"
+    },
+    {
+        "inputs": [
+            {"name": "recipient", "type": "address"},
+            {"name": "amount", "type": "uint256"}
+        ],
+        "name": "transfer",
+        "outputs": [{"name": "", "type": "bool"}],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
 ]"#;
 
 #[derive(Clone, Debug)]
 pub struct BlockchainClient {
-    provider: Arc<Provider<Http>>,
+    pub provider: Arc<Provider<Http>>,
     config: NetworkConfig,
 }
 
@@ -260,33 +266,3 @@ impl BlockchainClient {
         return symbol.to_string();
     }
 }
-
-// Example API implementation for web framework integration
-// pub async fn handle_wallet_connection(chain_id: u64, wallet_address: &str) -> Result<String, CustomError> {
-//     let client = BlockchainClient::new(chain_id).await?;
-//     let (balance, symbol) = client.get_native_balance(wallet_address).await?;
-//     let network_status = client.get_network_status().await?;
-
-//     Ok(format!(
-//         "Connected to {} - Balance: {} {} - Latest Block: {}",
-//         network_status.name,
-//         ethers::utils::format_ether(balance),
-//         symbol,
-//         network_status.latest_block
-//     ))
-// }
-
-// #[tokio::main]
-// async fn main() -> Result<(), CustomError> {
-//     // Example usage
-//     let chain_id = 1; // Ethereum Mainnet
-//     let wallet_address = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
-
-//     // Connect to the network and get wallet info
-//     match handle_wallet_connection(chain_id, wallet_address).await {
-//         Ok(info) => println!("{}", info),
-//         Err(e) => eprintln!("Error: {}", e),
-//     }
-
-//     Ok(())
-// }

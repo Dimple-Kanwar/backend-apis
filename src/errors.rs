@@ -24,6 +24,9 @@ pub enum CustomError {
     
     #[error("Invalid address: {0}")]
     InvalidAddressError(String),
+
+    #[error("Invalid amount: {0}")]
+    InvalidAmountError(String),
     
     #[error("Network error: {0}")]
     NetworkError(String),
@@ -42,6 +45,12 @@ pub enum CustomError {
 
     #[error("Resource not found")]
     NotFoundError,
+
+    #[error("Transaction failed")]
+    TransactionFailedError,
+
+    #[error("Failed to get transaction receipt")]
+    TransactionReceiptFailedError,
     
     #[error("Invalid input: {0}")]
     ValidationError(String)
@@ -72,6 +81,9 @@ impl ResponseError for CustomError {
                 CustomError::StringifiedProviderError(_) => 500,
                 CustomError::ContractError(_) => 500,
                 CustomError::TokenNotFoundError(_) => 404,
+                CustomError::InvalidAmountError(_) => 400,
+                CustomError::TransactionFailedError => 500,
+                CustomError::TransactionReceiptFailedError => 500,
             },
             message: self.to_string(),
         };
@@ -97,6 +109,9 @@ impl ResponseError for CustomError {
             CustomError::StringifiedProviderError(_) => HttpResponse::InternalServerError().json(response),
             CustomError::ContractError(_) => HttpResponse::InternalServerError().json(response),
             CustomError::TokenNotFoundError(_) => HttpResponse::NotFound().json(response),
+            CustomError::InvalidAmountError(_) => HttpResponse::BadRequest().json(response),
+            CustomError::TransactionFailedError => HttpResponse::InternalServerError().json(response),
+            CustomError::TransactionReceiptFailedError => HttpResponse::InternalServerError().json(response),
         }
     }
 }

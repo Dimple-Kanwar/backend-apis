@@ -1,34 +1,95 @@
-import { BridgeRequest, Token } from "../interfaces/requests";
-import { getBridgeContract, getProvider } from "../utils/bridgeUtils";
-import { fetchCoinMarketData } from "./price.service"
+import { Addressable, AddressLike, ethers } from 'ethers';
+import { ChainService } from './chain.service';
+import { TransactionService } from './transaction.service';
+import { CHAIN_CONFIGS } from '../config/chains';
+import { BridgeRequest } from '../interfaces/requests';
 
-// 1 btc to eth
-export const bridgeTokens = async(bridgeRequest: BridgeRequest) => {
-    //get exchange rate for ETH to wETH
-    // lock btc in bitcoin network
-    // connect to source chain
-    
-    
-    // connect to bridge contract on source chain
-    
-    // listen for lock event
-    // unlock eth in ethereum network
-    // listen for unlock event
-    //bridge complete
-}
+export class BridgeService {
+    private chainService: ChainService;
+    private transactionService: TransactionService;
 
-export const lockToken = async (sourceToken:Token, destinaionToken: Token) => {
-    const sourceProvider = await getProvider(sourceToken.chainId);
-    const sourceBridgeContract = await getBridgeContract(sourceToken.chainId);
-    const tx = await sourceBridgeContract.lockToken(sourceToken.token, sourceToken.amount, destinaionToken.chainId, destinaionToken.account);
-    const receipt = await tx.wait();
-    return tx.hash;
-}
+    constructor() {
+        this.chainService = new ChainService(CHAIN_CONFIGS);
+        this.transactionService = new TransactionService();
+    }
 
-export const releaseToken = async (sourceToken:Token, destinaionToken: Token) => {
-    const destinationProvider = await getProvider(destinaionToken.chainId);
-    const destinationBridgeContract = await getBridgeContract(sourceToken.chainId);
-    const tx = await destinationBridgeContract.lockToken(sourceToken.token, sourceToken.amount, destinaionToken.chainId, destinaionToken.account);
-    const receipt = await tx.wait();
-    return tx.hash;
+    async lockToken({
+        sourceChainId,
+        targetChainId,
+        token,
+        amount,
+        recipient
+    }: {
+        sourceChainId: number,
+        targetChainId: number,
+        token: Addressable,
+        amount: number,
+        recipient: AddressLike
+    }) {
+        const bridgeContract = this.chainService.getBridgeContract(sourceChainId);
+        const tokenContract = new ethers.Contract(
+            token,
+            ['function approve(address spender, uint256 amount) returns (bool)'],
+            this.chainService.getSigner(sourceChainId)
+        );
+
+        // Approve bridge contract
+        const approveTx = await tokenContract.approve(bridgeContract.address, amount);
+        await approveTx.wait();
+
+        // Lock tokens
+        const tx = await bridgeContract.lockTokens(
+            token,
+            recipient,
+            amount,
+            targetChainId
+        );
+        const receipt = await tx.wait();
+
+        // Create transaction record
+        await this.transactionService.createTransaction({
+            sourceChainId,
+            targetChainId,
+            token,
+            amount,
+            sender: await this.chainService.getSigner(sourceChainId).getAddress(),
+            recipient,
+            sourceTxHash: tx.hash,
+            status: 'PENDING'
+        });
+
+        return { transactionHash: tx.hash };
+    }
+
+    // Additional methods for queries and transaction management
+    //   async getSupportedChains() {
+    //     return Object.entries(CHAIN_CONFIGS).map(([chainId, config]) => ({
+    //       id: parseInt(chainId),
+    //       name: config.name,
+    //       supportedTokens: Object.entries(config.supportedTokens).map(([symbol, address]) => ({
+    //         address,
+    //         symbol,
+    //         chainId: parseInt(chainId)
+    //       }))
+    //     }));
+    //   }
+
+    //   async getSupportedTokens(chainId: number) {
+    //     const config = CHAIN_CONFIGS[chainId];
+    //     if (!config) throw new Error('Unsupported chain');
+
+    //     return Object.entries(config.supportedTokens).map(([symbol, address]) => ({
+    //       address,
+    //       symbol,
+    //       chainId
+    //     }));
+    //   }
+
+    async getTransaction(id: string) {
+        return this.transactionService.getTransaction(id);
+    }
+
+    async getTransactions(address: string, status?: string) {
+        return this.transactionService.getTransactions(address, status);
+    }
 }

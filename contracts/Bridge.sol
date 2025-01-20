@@ -18,6 +18,8 @@ contract Bridge is BridgeStorage, ReentrancyGuard, Pausable, AccessControl {
     IBridgeValidator public immutable validator;
     uint256 public immutable chainId;
 
+    event TokenLocked(address token, address sender, uint256 amount, address recipient, uint256 sourceChainId, uint256 destinationChainId);
+
     constructor(address _validator, uint256 _chainId) {
         validator = IBridgeValidator(_validator);
         chainId = _chainId;
@@ -45,7 +47,7 @@ contract Bridge is BridgeStorage, ReentrancyGuard, Pausable, AccessControl {
 
         tokenBalances[token][chainId] += amount;
         
-        emit TokensLocked(token, msg.sender, amount);
+        emit TokenLocked(token, msg.sender, amount, recipient, chainId, destinationChainId);
     }
 
     function releaseToken(uint256 sourceChainId, address token, uint256 amount, address recipient, bytes memory signature) external nonReentrant whenNotPaused onlyRole(OPERATOR_ROLE){

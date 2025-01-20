@@ -7,7 +7,9 @@
     "deploy:localhost": "npx hardhat ignition deploy ignition/modules/Bridge.ts --network localhost",
     "deploy:base_sepolia": "npx hardhat ignition deploy ignition/modules/Bridge.ts --network base_sepolia",
     "deploy:arbitrum_sepolia": "npx hardhat ignition deploy ignition/modules/Bridge.ts --network arbitrum_sepolia",
-    "test": "npx hardhat test"
+    "test": "npx hardhat test",
+    "dev": "nodemon index.ts",
+    "start": "ts-node index.ts"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +26,7 @@
     "@typechain/ethers-v6": "^0.5.1",
     "@typechain/hardhat": "^9.1.0",
     "@types/chai": "^4.3.20",
+    "@types/cors": "^2.8.17",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.10.2",
     "chai": "^4.5.0",
@@ -36,8 +39,14 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@apollo/server": "^4.11.3",
     "@openzeppelin/contracts": "^5.2.0",
     "axios": "^1.7.9",
-    "dotenv": "^16.4.7"
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "graphql-subscriptions": "^3.0.0",
+    "mongoose": "^8.9.5",
+    "nodemon": "^3.1.9",
+    "subscriptions-transport-ws": "^0.11.0"
   }
 }

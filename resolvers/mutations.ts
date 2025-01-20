@@ -1,15 +1,16 @@
 import axios from "axios";
 import { fetchCoinMarketData, fetchPrice } from "../services/price.service";
-import { bridgeTokens } from "../services/bridge.service";
 import { BridgeRequest } from "../interfaces/requests";
+import { BridgeService} from "../services/bridge.service";
 import("dotenv/config");
 
 export const mutation = {
     Mutation: {
         // Fetch current market data for a specific coin
-        async bridgeToken(_: any, { bridgeRequest }: { bridgeRequest: BridgeRequest }) {
-            return await bridgeTokens(bridgeRequest)
-                .then((res) => res)
+        async lockToken(_: any, { bridgeRequest }: { bridgeRequest: BridgeRequest }) {
+            const bridgeService = new BridgeService();
+            return await bridgeService.lockToken(bridgeRequest)
+                .then((res: any) => res)
                 .catch((err: Error) => {
                     console.error(err);
                     throw err;
@@ -17,7 +18,7 @@ export const mutation = {
         },
 
         async getCoinPrice(_: any, { id }: { id: number }) {
-            return await fetchPrice(id)
+            return await fetchPrice(id.toString())
                 .then((res) => res)
                 .catch((err: Error) => {
                     console.error(err);

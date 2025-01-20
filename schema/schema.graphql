@@ -1,0 +1,63 @@
+type Token {
+    address: String!
+    symbol: String!
+    chainId: Int!
+  }
+
+  type Chain {
+    id: Int!
+    name: String!
+    supportedTokens: [Token!]!
+  }
+
+  type BridgeTransaction {
+    id: ID!
+    sourceChainId: Int!
+    targetChainId: Int!
+    token: String!
+    amount: String!
+    sender: String!
+    recipient: String!
+    nonce: String!
+    sourceTxHash: String
+    targetTxHash: String
+    status: TransactionStatus!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  enum TransactionStatus {
+    PENDING
+    COMPLETED
+    FAILED
+  }
+
+  type LockTokenResponse {
+    success: Boolean!
+    transactionHash: String
+    error: String
+  }
+
+  type Query {
+    supportedChains: [Chain!]!
+    supportedTokens(chainId: Int!): [Token!]!
+    bridgeTransaction(id: ID!): BridgeTransaction
+    bridgeTransactions(
+      address: String!
+      status: TransactionStatus
+    ): [BridgeTransaction!]!
+  }
+
+  type Mutation {
+    lockToken(
+      sourceChainId: Int!
+      targetChainId: Int!
+      token: String!
+      amount: String!
+      recipient: String!
+    ): LockTokenResponse!
+  }
+
+  type Subscription {
+    bridgeTransactionUpdated(address: String!): BridgeTransaction!
+  }

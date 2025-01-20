@@ -27,10 +27,10 @@ export class BridgeService {
         recipient: AddressLike
     }) {
         const bridgeContract = this.chainService.getBridgeContract(sourceChainId);
+        const signer = this.chainService.getSigner(sourceChainId);
         const tokenContract = new ethers.Contract(
             token,
-            ['function approve(address spender, uint256 amount) returns (bool)'],
-            this.chainService.getSigner(sourceChainId)
+            ['function approve(address spender, uint256 amount) returns (bool)']
         );
 
         // Approve bridge contract
@@ -40,11 +40,12 @@ export class BridgeService {
         // Lock tokens
         const tx = await bridgeContract.lockTokens(
             token,
-            recipient,
             amount,
-            targetChainId
+            targetChainId,
+            recipient
         );
         const receipt = await tx.wait();
+
 
         // Create transaction record
         await this.transactionService.createTransaction({
@@ -52,7 +53,7 @@ export class BridgeService {
             targetChainId,
             token,
             amount,
-            sender: await this.chainService.getSigner(sourceChainId).getAddress(),
+            sender: signer, //await signer.getAddress(),
             recipient,
             sourceTxHash: tx.hash,
             status: 'PENDING'

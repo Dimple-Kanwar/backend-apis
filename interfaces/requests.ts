@@ -1,8 +1,8 @@
-import { AddressLike, BigNumberish } from "ethers";
+import { Addressable, AddressLike, BigNumberish } from "ethers";
 
 export interface Token {
-    amount: BigNumberish,
-    token: AddressLike,
+    amount: number,
+    token: Addressable,
     account: string,
     chainId: number
 }

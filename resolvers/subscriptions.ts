@@ -4,7 +4,7 @@ export const subscriptions = {
     Subscription: {
         bridgeTransactionUpdated: {
             subscribe: (_: any, { address }: { address: AddressLike}) =>
-                pubsub.asyncIterator([`TRANSACTION_UPDATED_${address.toString().toLowerCase()}`])
+                pubsub.asyncIterableIterator([`TRANSACTION_UPDATED_${address.toString().toLowerCase()}`])
         }
     }
 }

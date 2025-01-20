@@ -1,4 +1,4 @@
-import { ethers } from 'ethers';
+import { ethers, Signer } from 'ethers';
 import { ChainConfig } from '../types';
 import { abi as BridgeABI } from '../artifacts/contracts/Bridge.sol/Bridge.json';
 
@@ -37,7 +37,6 @@ export class ChainService {
     return contract;
   }
 
-  getSigner(sourceChainId: number) {
-    
+  getSigner(chainId: number) {
   }
 }

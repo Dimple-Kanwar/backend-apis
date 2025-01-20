@@ -1,8 +1,28 @@
-# decimal-backend
+# Sample Hardhat Project
 
-Run:
+This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
 
-    cargo run
+Try running some of the following tasks:
 
-cargo-watch command:
-    cargo watch -q -c -w src/ -x run
+```shell
+npx hardhat help
+npx hardhat test
+REPORT_GAS=true npx hardhat test
+npx hardhat node
+npx hardhat ignition deploy ./ignition/modules/Lock.ts
+```
+
+## Local setup instructions:
+
+    npm install
+
+setup .env file: 
+
+    cp .env.sample .env
+
+#Note: replace private keys for the required accounts
+
+    npm start
+
+    npm run test
+

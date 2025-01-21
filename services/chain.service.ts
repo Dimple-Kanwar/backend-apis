@@ -37,6 +37,8 @@ export class ChainService {
     return contract;
   }
 
+  // TO DO
   getSigner(chainId: number) {
+    
   }
 }

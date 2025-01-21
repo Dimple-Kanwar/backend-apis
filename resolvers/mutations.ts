@@ -7,6 +7,7 @@ import("dotenv/config");
 export const mutation = {
     Mutation: {
         // Fetch current market data for a specific coin
+        // TO DO
         async lockToken(_: any, { bridgeRequest }: { bridgeRequest: BridgeRequest }) {
             const bridgeService = new BridgeService();
             return await bridgeService.lockToken({ sourceChainId: bridgeRequest.sourceToken.chainId, targetChainId: bridgeRequest.destinaionToken.chainId, token: bridgeRequest.sourceToken.token, amount: bridgeRequest.sourceToken.amount, recipient: bridgeRequest.destinaionToken.account })
@@ -16,6 +17,7 @@ export const mutation = {
                     throw err;
                 });
         },
+
 
         async getCoinPrice(_: any, { id }: { id: number }) {
             return await fetchPrice(id.toString())

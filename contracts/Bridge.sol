@@ -50,6 +50,8 @@ contract Bridge is BridgeStorage, ReentrancyGuard, Pausable, AccessControl {
         emit TokenLocked(token, msg.sender, amount, recipient, chainId, destinationChainId);
     }
 
+    // decimal fee deduction 0.3% of the transaction amount, add gas fee with this 0.3%
+
     function releaseToken(uint256 sourceChainId, address token, uint256 amount, address recipient, bytes memory signature) external nonReentrant whenNotPaused onlyRole(OPERATOR_ROLE){
         bytes32 txHash = keccak256(abi.encodePacked(sourceChainId, token, chainId, amount, recipient, block.timestamp));
         require(!transactions[txHash].processed, "Transaction processed already");

@@ -17,15 +17,18 @@ contract Bridge is BridgeStorage, ReentrancyGuard, Pausable, AccessControl {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     IBridgeValidator public immutable validator;
     uint256 public immutable chainId;
+    // uint256 public platformFeePercentage;
 
     event TokenLocked(address token, address sender, uint256 amount, address recipient, uint256 sourceChainId, uint256 destinationChainId);
 
     constructor(address _validator, uint256 _chainId) {
         validator = IBridgeValidator(_validator);
         chainId = _chainId;
+        // platformFeePercentage = _platformFeePercentage;
        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender); 
        _grantRole(OPERATOR_ROLE, msg.sender);
     }
+
 
     function lockTokens(address token, uint256 amount, uint256 destinationChainId, address recipient) external nonReentrant whenNotPaused{
         require(amount > 0 , "Amount must be greater than 0");
@@ -58,8 +61,21 @@ contract Bridge is BridgeStorage, ReentrancyGuard, Pausable, AccessControl {
         require(validator.validateTransaction(sourceChainId,chainId, token, amount, recipient,signature), "Invalid transaction signature");
 
         transactions[txHash].processed = true;
+        
+        // Calculate platform fee
+        // uint256 platformFee = (amount * platformFeePercentage)/10000;
 
+        // // Ensure sufficient amount remains after deducting fees
+        // require(amount > platformFee, "Amount too low after fees");
+
+        // uint256 finalAmount = amount - platformFee;
+
+        // release tokens to recipient account
         IERC20(token).transfer(recipient, amount);
+
+        // Transfer platform fee to the decimal account
+        // IERC20(token).transfer(msg.sender, platformFee);
+
         tokenBalances[token][chainId] -= amount;
 
         emit TokensReleased(token, recipient, amount);

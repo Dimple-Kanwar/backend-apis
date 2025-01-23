@@ -5,6 +5,7 @@ import { CHAIN_CONFIGS } from "../config/chains";
 import { EventListener } from "./events.service";
 import { Relayer } from "./relayer.service";
 import { Validator } from "./validator.service";
+
 export class BridgeService {
   private chainService: ChainService;
   private transactionService: TransactionService;

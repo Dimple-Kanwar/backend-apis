@@ -7,7 +7,6 @@ type Token {
   type Chain {
     id: Int!
     name: String!
-    supportedTokens: [Token!]!
   }
 
   type BridgeTransaction {
@@ -32,7 +31,7 @@ type Token {
     FAILED
   }
 
-  type LockTokenResponse {
+  type BridgeTokenResponse {
     success: Boolean!
     transactionHash: String
     error: String
@@ -40,7 +39,7 @@ type Token {
 
   type Query {
     supportedChains: [Chain!]!
-    supportedTokens(chainId: Int!): [Token!]!
+    getCoinPrice(): 
     bridgeTransaction(id: ID!): BridgeTransaction
     bridgeTransactions(
       address: String!
@@ -49,13 +48,13 @@ type Token {
   }
 
   type Mutation {
-    lockToken(
+    bridgeToken(
       sourceChainId: Int!
       targetChainId: Int!
       token: String!
       amount: String!
       recipient: String!
-    ): LockTokenResponse!
+    ): BridgeTokenResponse!
   }
 
   type Subscription {

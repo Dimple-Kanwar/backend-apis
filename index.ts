@@ -1,92 +1,78 @@
-import { makeExecutableSchema } from '@graphql-tools/schema';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
-import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
-import {
-    ApolloServerPluginLandingPageLocalDefault,
-    ApolloServerPluginLandingPageProductionDefault,
-} from '@apollo/server/plugin/landingPage/default';
-import express, { Request } from 'express';
-import { execute, subscribe } from 'graphql';
 import { createServer } from 'http';
-import fs from 'fs';
-import { SubscriptionServer } from 'subscriptions-transport-ws';
-import { mutation } from './resolvers/mutations';
-import { query } from './resolvers/query';
+import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { ChainService } from './services/chain.service';
-import { Validator } from './services/validator.service';
-import { Relayer } from './services/relayer.service';
-import { CHAIN_CONFIGS } from './config/chains';
-import { EventListener } from './services/events.service';
-import { BridgeService } from './services/bridge.service';
+import { loadSchema } from './schema/schema';
 import { connectDB } from './database/connection';
-const schemaFile = path.join(__dirname + "/schema/", 'schema.graphql');
-const typeDefs = fs.readFileSync(schemaFile, 'utf8');
+import { BridgeService } from './services/bridge.service';
 
+
+const app = express();
+const httpServer = createServer(app);
+
+// CORS configuration
+const corsOptions = {
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    methods: ["GET", "POST", "OPTIONS"],
+    credentials: true
+};
+
+app.use(cors(corsOptions));
+app.use(express.json());
 
 async function startServer() {
-    const app = express();
-    const httpServer = createServer(app);
+    try {
+        // Load GraphQL schema
+        const schema = loadSchema();
+        console.log({schema});
+        // Set up Apollo Server
+        const server = new ApolloServer({
+            schema,
+            formatError: (error) => {
+                console.error('GraphQL Error:', error);
+                return error;
+            },
+        });
 
-    // Load GraphQL schema
-    const schema = makeExecutableSchema({
-        typeDefs, resolvers: {
-            ...mutation,
-            ...query
-        }
-    });
+        // Start Apollo Server
+        await server.start();
 
-    // CORS configuration
-    const corsOptions = {
-        origin: ["*"],
-        methods: ["GET", "POST", "OPTIONS"],
-        credentials: true
-    };
+        // Apply Apollo middleware to Express
+        app.use(
+            '/graphql',
+            cors<cors.CorsRequest>(corsOptions),
+            express.json(),
+            expressMiddleware(server, {
+                context: async ({ req }) => ({
+                    BridgeService
+                    // Add authentication context here
+                }),
+            })
+        );
 
+        // Health check endpoint
+        app.get('/health', (req, res) => {
+            res.json({
+                status: 'healthy',
+                timestamp: new Date(),
+                // socketConnections: io.engine.clientsCount
+            });
+        });
 
-    const server = new ApolloServer({
-        schema,
-        plugins: [
-            process.env.NODE_ENV === 'production'
-                ? ApolloServerPluginLandingPageProductionDefault()
-                : ApolloServerPluginLandingPageLocalDefault({ embed: false }),
-            ApolloServerPluginDrainHttpServer({ httpServer })]
-    });
+        // Start server
+        const PORT = process.env.PORT || 4000;
+        await connectDB();
+        httpServer.listen(PORT, () => {
+            console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
+            // console.log(`🔌 Socket.IO is listening on port ${PORT}`);
+        });
 
-    // Set up our Express middleware to handle CORS, body parsing,
-    // and our expressMiddleware function.
-    app.use(
-        '/',
-        cors<cors.CorsRequest>(corsOptions),
-        express.json(),
-        // expressMiddleware accepts the same arguments:
-        // an Apollo Server instance and optional configuration options
-        expressMiddleware(server, {
-            context: async ({ req }) => ({
-                BridgeService
-                // Add authentication context here
-            }),
-        }),
-    );
-
-    await server.start();
-
-    SubscriptionServer.create(
-        { schema, execute, subscribe },
-        { server: httpServer, path: "/graphql" }
-    );
-
-    await connectDB();
-
-    const PORT = process.env.PORT || 4000;
-    httpServer.listen(PORT, () => {
-        console.log(`🚀 Server running at http://localhost:${PORT}/graphql`);
-        console.log(`🚀 Subscriptions ready at ws://localhost:${PORT}/graphql`);
-    });
+    } catch (error) {
+        console.error('Failed to start server:', error);
+        process.exit(1);
+    }
 }
-
 
 // Error handling for the process
 process.on('unhandledRejection', (error) => {

@@ -1,62 +1,71 @@
 type Token {
+  address: String!
+  symbol: String!
+  chainId: Int!
+}
+
+type Chain {
+  id: Int!
+  name: String!
+}
+
+type Coin {
+  id: String
+  symbol: String
+  name: String
+  current_price: Float
+  market_cap: Float
+}
+
+type BridgeTransaction {
+  id: ID!
+  sourceChainId: Int!
+  targetChainId: Int!
+  token: String!
+  amount: String!
+  sender: String!
+  recipient: String!
+  nonce: String!
+  sourceTxHash: String
+  targetTxHash: String
+  status: TransactionStatus!
+  createdAt: String!
+  updatedAt: String!
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+type BridgeTokenResponse {
+  success: Boolean!
+  transactionHash: String
+  error: String
+}
+
+type Query {
+  supportedChains: [Chain!]!
+  getCoinPrice(id: String): Coin 
+  getCoinMarketData(id: String, vs_currency: String): Coin
+  bridgeTransaction(id: ID!): BridgeTransaction
+  bridgeTransactions(
     address: String!
-    symbol: String!
-    chainId: Int!
-  }
+    status: TransactionStatus
+  ): [BridgeTransaction!]!
+}
 
-  type Chain {
-    id: Int!
-    name: String!
-  }
-
-  type BridgeTransaction {
-    id: ID!
+type Mutation {
+  bridgeToken(
     sourceChainId: Int!
     targetChainId: Int!
     token: String!
     amount: String!
-    sender: String!
     recipient: String!
-    nonce: String!
-    sourceTxHash: String
-    targetTxHash: String
-    status: TransactionStatus!
-    createdAt: String!
-    updatedAt: String!
-  }
+  ): BridgeTokenResponse!
+}
 
-  enum TransactionStatus {
-    PENDING
-    COMPLETED
-    FAILED
-  }
-
-  type BridgeTokenResponse {
-    success: Boolean!
-    transactionHash: String
-    error: String
-  }
-
-  type Query {
-    supportedChains: [Chain!]!
-    getCoinPrice(): 
-    bridgeTransaction(id: ID!): BridgeTransaction
-    bridgeTransactions(
-      address: String!
-      status: TransactionStatus
-    ): [BridgeTransaction!]!
-  }
-
-  type Mutation {
-    bridgeToken(
-      sourceChainId: Int!
-      targetChainId: Int!
-      token: String!
-      amount: String!
-      recipient: String!
-    ): BridgeTokenResponse!
-  }
-
-  type Subscription {
-    bridgeTransactionUpdated(address: String!): BridgeTransaction!
-  }
+type Subscription {
+  bridgeTransactionUpdated(address: String!): BridgeTransaction!
+}

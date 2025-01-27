@@ -1,4 +1,4 @@
-import { Addressable, AddressLike, Contract, ethers } from "ethers";
+import { Addressable, AddressLike, Contract, ethers, Wallet } from "ethers";
 import { ChainService } from "./chain.service";
 import { TransactionService } from "./transaction.service";
 import { CHAIN_CONFIGS } from "../config/chains";
@@ -105,6 +105,31 @@ export class BridgeService {
       transactionHash: tx.hash,
       transactionId: transaction.id,
     };
+  }
+
+  async releaseToken(sourceChainId: number, targetChainId: number, wallet: Wallet,token: string, recipient: AddressLike, amount:number,signature: string) {
+    // Get target chain contract
+    const targetContract = this.chainService.getBridgeContract(targetChainId);
+    const connectedContract = targetContract.connect(wallet) as Contract;
+
+    // Submit release transaction
+    const tx = await connectedContract.releaseToken(
+      token,
+      recipient,
+      amount,
+      // eventData.nonce,
+      sourceChainId,
+      signature
+    );
+
+    await tx.wait();
+    console.log(`Tokens released on chain ${targetChainId}. Tx: ${tx.hash}`);
+
+    return {
+      hash: tx.hash,
+
+      
+    }
   }
 
   async getTransaction(id: string) {

@@ -1,3 +1,4 @@
+# schema.graphql
 type Token {
   address: String!
   symbol: String!
@@ -32,6 +33,16 @@ type BridgeTransaction {
   updatedAt: String!
 }
 
+type ApiKey {
+  clientName: String!
+  isActive: Boolean!
+  createdAt: String!
+  lastUsed: String
+  usageCount: Int!
+  rateLimit: Int!
+  dailyUsage: Int!
+}
+
 enum TransactionStatus {
   PENDING
   COMPLETED
@@ -44,32 +55,44 @@ type BridgeTokenResponse {
   error: String
 }
 
+input ApiKeyInput {
+  clientName: String!
+  rateLimit: Int!
+}
+
 type Query {
   supportedChains: [Chain!]!
-  getCoinPrice(id: String): Coin 
+  getCoinPrice(id: String): Coin
   getCoinMarketData(id: String, vs_currency: String): Coin
   bridgeTransaction(id: ID!): BridgeTransaction
   bridgeTransactions(
     address: String!
     status: TransactionStatus
   ): [BridgeTransaction!]!
+  getApiKeyInfo(key: String!): ApiKey
 }
 type BridgeRequest {
   token: String!
   sourceChainId: Int!
   targetChainId: Int!
-  amount: String!,
+  amount: String!
   sender: String!
   recipient: String!
 }
 
 type Mutation {
-  bridgeToken(token: String!
-  sourceChainId: Int!
-  targetChainId: Int!
-  amount: String!,
-  sender: String!
-  recipient: String!): BridgeTokenResponse!
+  bridgeToken(
+    token: String!
+    sourceChainId: Int!
+    targetChainId: Int!
+    amount: String!
+    sender: String!
+    recipient: String!
+  ): BridgeTokenResponse!
+  generateApiKey(input: ApiKeyInput!): String!
+  deactivateApiKey(key: String!): Boolean!
+  updateRateLimit(key: String!, newLimit: Int!): Boolean!
+  resetApiKey(key: String!): String
 }
 
 type Subscription {

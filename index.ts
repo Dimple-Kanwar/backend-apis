@@ -1,86 +1,105 @@
-import { ApolloServer } from '@apollo/server';
-import { expressMiddleware } from '@apollo/server/express4';
-import { createServer } from 'http';
-import express from 'express';
-import cors from 'cors';
-import { loadSchema } from './schema/schema';
-import { connectDB } from './database/connection';
-import { BridgeService } from './services/bridge.service';
-
+import * as dotenv from "dotenv";
+dotenv.config();
+import { ApolloServer } from "@apollo/server";
+import { expressMiddleware } from "@apollo/server/express4";
+import { createServer } from "http";
+import express from "express";
+import cors from "cors";
+import { loadSchema } from "./schema/schema";
+import { connectDB } from "./database/connection";
+import { BridgeService } from "./services/bridge.service";
+import { ApiKeyService } from "./services/apikey.service";
 
 const app = express();
 const httpServer = createServer(app);
 
-// CORS configuration
 const corsOptions = {
-    origin: ["http://localhost:5173", "http://localhost:5174"],
-    methods: ["GET", "POST", "OPTIONS"],
-    credentials: true
+  origin: ["http://localhost:5173", "http://localhost:5174"],
+  methods: ["GET", "POST", "OPTIONS"],
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
 
 async function startServer() {
-    try {
-        // Load GraphQL schema
-        const schema = loadSchema();
-        // Set up Apollo Server
-        const server = new ApolloServer({
-            schema,
-            formatError: (error) => {
-                console.error('GraphQL Error:', error);
-                return error;
-            },
-        });
+  try {
+    // Load GraphQL schema
+    const schema = loadSchema();
+    // Set up Apollo Server
+    const server = new ApolloServer({
+      schema,
+      formatError: (error) => {
+        console.error("GraphQL Error:", error);
+        return error;
+      },
+    });
 
-        // Start Apollo Server
-        await server.start();
+    await server.start();
 
-        // Apply Apollo middleware to Express
-        app.use(
-            '/graphql',
-            cors<cors.CorsRequest>(corsOptions),
-            express.json(),
-            expressMiddleware(server, {
-                context: async ({ req }) => ({
-                    BridgeService
-                    // Add authentication context here
-                }),
-            })
-        );
+    app.use(
+      "/graphql",
+      cors<cors.CorsRequest>(corsOptions),
+      express.json(),
+      expressMiddleware(server, {
+        context: async ({ req }) => {
+          const query = req.body.query || "";
+          const operationName = req.body.operationName;
 
-        // Health check endpoint
-        app.get('/health', (req, res) => {
-            res.json({
-                status: 'healthy',
-                timestamp: new Date(),
-                // socketConnections: io.engine.clientsCount
-            });
-        });
+          // Allow API key generation without authentication
+          if (query.includes("mutation") && query.includes("generateApiKey")) {
+            return {
+              bridgeService: new BridgeService(),
+              isAuthenticated: true,
+            };
+          }
 
-        // Start server
-        const PORT = process.env.PORT || 4000;
-        await connectDB();
-        httpServer.listen(PORT, () => {
-            console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
-            // console.log(`🔌 Socket.IO is listening on port ${PORT}`);
-        });
+          // Allow introspection queries
+          if (
+            query.includes("IntrospectionQuery") ||
+            query.includes("__schema") ||
+            query.includes("__type")
+          ) {
+            return {
+              bridgeService: new BridgeService(),
+              isAuthenticated: true,
+            };
+          }
 
-    } catch (error) {
-        console.error('Failed to start server:', error);
-        process.exit(1);
-    }
+          // Validate API key for all other operations
+          const apiKey = req.headers["x-api-key"] as string;
+          if (!apiKey || !(await ApiKeyService.validateApiKey(apiKey))) {
+            throw new Error(
+              "Unauthorized: Invalid API key or rate limit exceeded"
+            );
+          }
+
+          return {
+            bridgeService: new BridgeService(),
+            isAuthenticated: true,
+            apiKey,
+          };
+        },
+      })
+    );
+
+    const PORT = process.env.PORT || 4000;
+    await connectDB();
+    httpServer.listen(PORT, () => {
+      console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
 }
 
-// Error handling for the process
-process.on('unhandledRejection', (error) => {
-    console.error('Unhandled Rejection:', error);
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled Rejection:", error);
 });
 
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
 });
 
-// Start the server
 startServer().catch(console.error);

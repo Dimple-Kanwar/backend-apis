@@ -15,9 +15,7 @@ type DatabaseConfigs = {
 
 export const DATABASE_CONFIG: DatabaseConfigs = {
   development: {
-    url:
-      process.env.MONGODB_URI ||
-      `mongodb+srv://romario7kavin:${process.env.DB_PASS}@decimal.lqtxi.mongodb.net/?retryWrites=true&w=majority&appName=decimal`,
+    url: process.env.MONGODB_URI || "",
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true,

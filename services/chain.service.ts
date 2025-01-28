@@ -21,13 +21,13 @@ export class ChainService {
       const provider = new ethers.JsonRpcProvider(config.rpcUrl);
       this.providers.set(Number(chainId), provider);
       const admin = new Wallet(process.env.ADMIN_ACCOUNT_PK!);
-      this.setSigner(Number(chainId), admin);
       const bridgeContract = new ethers.Contract(
         config.bridgeAddress,
         BridgeABI,
         provider
       );
       this.bridgeContracts.set(Number(chainId), bridgeContract);
+      this.setSigner(Number(chainId), admin);
     }
   }
 

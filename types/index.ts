@@ -3,6 +3,7 @@ export interface ChainConfig {
     rpcUrl: string;
     chainId: number;
     bridgeAddress: string;
+    bridgeValidatorAddress: string;
     // supportedTokens: {
     //     [tokenSymbol: string]: string; // token address
     // };

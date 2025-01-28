@@ -5,6 +5,7 @@ import { CHAIN_CONFIGS } from "../config/chains";
 import { EventListener } from "./events.service";
 import { Relayer } from "./relayer.service";
 import { Validator } from "./validator.service";
+import { BridgeRequest } from "../interfaces/requests";
 
 export class BridgeService {
   private chainService: ChainService;
@@ -25,25 +26,18 @@ export class BridgeService {
     );
   }
 
-  async lockToken({
-    sourceChainId,
+  async lockToken({ sourceChainId,
     targetChainId,
     token,
     amount,
-    recipient,
-  }: {
-    sourceChainId: number;
-    targetChainId: number;
-    token: Addressable;
-    amount: number;
-    recipient: AddressLike;
-  }) {
+    sender,
+    recipient }: BridgeRequest) {
     const transaction = await this.transactionService.createTransaction({
       sourceChainId,
       targetChainId,
       token,
       amount,
-      sender: await this.chainService.getSigner(sourceChainId).getAddress(),
+      sender,
       recipient,
       status: "PENDING",
     });
@@ -52,35 +46,36 @@ export class BridgeService {
       sourceChainId
     ) as Contract;
 
-    const lockTokenPromise = new Promise((resolve, reject) => {
-      sourceBridge.once(
-        "TokenLocked",
-        async (
-          token,
-          sender,
-          amount,
-          recipient,
-          sourceChainId,
-          destinationChainId,
-          event
-        ) => {
-          try {
-            await this.relayer.processEvent({
-              token,
-              sender,
-              recipient,
-              amount: amount.toString(),
-              sourceChainId: Number(sourceChainId),
-              targetChainId: Number(destinationChainId),
-              transactionHash: event.transactionHash,
-            });
-            resolve(event);
-          } catch (error) {
-            reject(error);
-          }
-        }
-      );
-    });
+
+    // const lockTokenPromise = new Promise((resolve, reject) => {
+    //   sourceBridge.once(
+    //     "TokenLocked",
+    //     async (
+    //       token,
+    //       sender,
+    //       amount,
+    //       recipient,
+    //       sourceChainId,
+    //       destinationChainId,
+    //       event
+    //     ) => {
+    //       try {
+    //         await this.relayer.processEvent({
+    //           token,
+    //           sender,
+    //           recipient,
+    //           amount: amount.toString(),
+    //           sourceChainId: Number(sourceChainId),
+    //           targetChainId: Number(destinationChainId),
+    //           transactionHash: event.transactionHash,
+    //         });
+    //         resolve(event);
+    //       } catch (error) {
+    //         reject(error);
+    //       }
+    //     }
+    //   );
+    // });
 
     const tokenContract = new ethers.Contract(
       token,
@@ -99,7 +94,7 @@ export class BridgeService {
     );
     await tx.wait();
 
-    await lockTokenPromise;
+    // await lockTokenPromise;
 
     return {
       transactionHash: tx.hash,
@@ -107,7 +102,7 @@ export class BridgeService {
     };
   }
 
-  async releaseToken(sourceChainId: number, targetChainId: number, wallet: Wallet,token: string, recipient: AddressLike, amount:number,signature: string) {
+  async releaseToken(sourceChainId: number, targetChainId: number, wallet: Wallet, token: string, recipient: AddressLike, amount: number, signature: string) {
     // Get target chain contract
     const targetContract = this.chainService.getBridgeContract(targetChainId);
     const connectedContract = targetContract.connect(wallet) as Contract;
@@ -128,7 +123,7 @@ export class BridgeService {
     return {
       hash: tx.hash,
 
-      
+
     }
   }
 

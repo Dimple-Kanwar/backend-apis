@@ -26,7 +26,6 @@ type BridgeTransaction {
   amount: String!
   sender: String!
   recipient: String!
-  nonce: String!
   sourceTxHash: String
   targetTxHash: String
   status: TransactionStatus!
@@ -72,13 +71,22 @@ type Query {
   ): [BridgeTransaction!]!
   getApiKeyInfo(key: String!): ApiKey
 }
+type BridgeRequest {
+  token: String!
+  sourceChainId: Int!
+  targetChainId: Int!
+  amount: String!
+  sender: String!
+  recipient: String!
+}
 
 type Mutation {
   bridgeToken(
+    token: String!
     sourceChainId: Int!
     targetChainId: Int!
-    token: String!
     amount: String!
+    sender: String!
     recipient: String!
   ): BridgeTokenResponse!
   generateApiKey(input: ApiKeyInput!): String!

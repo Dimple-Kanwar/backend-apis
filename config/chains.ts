@@ -6,6 +6,7 @@ export const CHAIN_CONFIGS: { [chainId: number]: ChainConfig } = {
         chainId: 421614,
         name: "Arbitrum Sepolia",
         bridgeAddress: process.env.ARBITRUM_BRIDGE_ADDRESS || '',
+        bridgeValidatorAddress: ''
         // supportedTokens: {
         //     'USDC': process.env.ARBITRUM_USDC_ADDRESS || '',
         //     // Add more tokens
@@ -16,9 +17,20 @@ export const CHAIN_CONFIGS: { [chainId: number]: ChainConfig } = {
         chainId: 84532,
         name: "Base Sepolia",
         bridgeAddress: process.env.BASE_BRIDGE_ADDRESS || '',
-        // supportedTokens: {
-        //     'USDC': process.env.BASE_USDC_ADDRESS || '',
-        //     // Add more tokens
-        // }
+        bridgeValidatorAddress: ''
+    },
+    31: {
+        rpcUrl: process.env.ROOTSTOCK_TESTNET_RPC || '',
+        chainId: 31,
+        name: "Rootstock Testnet",
+        bridgeAddress: '0x16D769F63Fe44f4f5590159cECADafaA9A9B8Fde',
+        bridgeValidatorAddress: '0xee3DB392af91d48E38f3ee9B6b30CfF4232c2a29'
+    },
+    80002: {
+        rpcUrl: process.env.ROOTSTOCK_TESTNET_RPC || '',
+        chainId: 80002,
+        name: "Rootstock Testnet",
+        bridgeAddress: '',
+        bridgeValidatorAddress: ''
     }
 };

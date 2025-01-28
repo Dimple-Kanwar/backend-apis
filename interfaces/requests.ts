@@ -8,6 +8,10 @@ export interface Token {
 }
 
 export interface BridgeRequest {
-    sourceToken: Token
-    destinaionToken: Token
+    token: string
+    sourceChainId: number
+    targetChainId: number
+    amount: String,
+    sender: String
+    recipient: String
 }

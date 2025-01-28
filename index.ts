@@ -24,8 +24,9 @@ app.use(express.json());
 
 async function startServer() {
   try {
+    // Load GraphQL schema
     const schema = loadSchema();
-
+    // Set up Apollo Server
     const server = new ApolloServer({
       schema,
       formatError: (error) => {

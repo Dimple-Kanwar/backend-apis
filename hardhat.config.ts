@@ -7,11 +7,19 @@ const config: HardhatUserConfig = {
   networks: {
     "base_sepolia": {
       url: process.env.BASE_TESTNET_RPC,
-      accounts: [process.env.BASE_ACCOUNT_PK!]
+      accounts: [process.env.ADMIN_ACCOUNT_PK!]
     },
     "arbitrum_sepolia": {
       url: process.env.ARBITRUM_TESTNET_RPC,
-      accounts: [process.env.ARB_ACCOUNT_PK!]
+      accounts: [process.env.ADMIN_ACCOUNT_PK!]
+    },
+    "gnosis_chiado_testnet": {
+      url: process.env.GNOSIS_TESTNET_RPC,
+      accounts: [process.env.ADMIN_ACCOUNT_PK!]
+    },
+    rootstock_testnet: {
+      url: process.env.ROOTSTOCK_TESTNET_RPC,
+      accounts: [process.env.ADMIN_ACCOUNT_PK!]
     },
     localhost: {
       url: "http://127.0.0.1:8545/"

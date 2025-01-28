@@ -7,7 +7,6 @@ const transactionSchema = new mongoose.Schema({
   amount: String,
   sender: String,
   recipient: String,
-  nonce: String,
   sourceTxHash: String,
   targetTxHash: String,
   status: {

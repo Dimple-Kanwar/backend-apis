@@ -9,9 +9,27 @@ import("dotenv/config");
 
 export const BridgeResolvers = {
     Mutation: {
-        async bridgeToken(_: any, { bridgeRequest }: { bridgeRequest: BridgeRequest }) {
+        async bridgeToken(_: any, { token,
+            sourceChainId,
+            targetChainId,
+            amount,
+            sender,
+            recipient }: {
+                token: string
+                sourceChainId: number
+                targetChainId: number
+                amount: string,
+                sender: string
+                recipient: string
+            }) {
             const bridgeService = new BridgeService();
-            return await bridgeService.lockToken({ sourceChainId: bridgeRequest.sourceToken.chainId, targetChainId: bridgeRequest.destinaionToken.chainId, token: bridgeRequest.sourceToken.token, amount: bridgeRequest.sourceToken.amount, recipient: bridgeRequest.destinaionToken.account })
+            
+            return await bridgeService.lockToken({token,
+                sourceChainId,
+                targetChainId,
+                amount,
+                sender,
+                recipient })
                 .then((res: any) => res)
                 .catch((err: Error) => {
                     console.error(err);

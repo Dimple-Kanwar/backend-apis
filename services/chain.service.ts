@@ -5,6 +5,7 @@ import { CHAIN_CONFIGS } from '../config/chains';
 import { GasService } from "./gas.service";
 import { Bridge__factory } from "../typechain-types";
 import { Chain } from "../interfaces/responses";
+import { network } from "hardhat";
 
 export class ChainService {
 
@@ -18,14 +19,17 @@ export class ChainService {
 
   private initializeProviders() {
     for (const [chainId, config] of Object.entries(this.configs)) {
-      const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+      const provider = new ethers.JsonRpcProvider(config.rpcUrl, {name: "Rootstock Testnet", chainId: Number(chainId)});
       this.providers.set(Number(chainId), provider);
-      const admin = new Wallet(process.env.ADMIN_ACCOUNT_PK!);
+      // console.log({provider});
+      const admin = new Wallet(process.env.ADMIN_ACCOUNT_PK!, provider);
+      // console.log({admin});
       const bridgeContract = new ethers.Contract(
         config.bridgeAddress,
         BridgeABI,
-        provider
+        admin
       );
+      // console.log({bridgeContract});
       this.bridgeContracts.set(Number(chainId), bridgeContract);
       this.setSigner(Number(chainId), admin);
     }
@@ -40,6 +44,7 @@ export class ChainService {
   public getBridgeContract(chainId: number) {
     // Return type changed to BaseContract
     const contract = this.bridgeContracts.get(chainId);
+    console.log({contract});
     if (!contract)
       throw new Error(`Bridge contract not found for chain ${chainId}`);
     return contract;

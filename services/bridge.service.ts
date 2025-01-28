@@ -46,7 +46,7 @@ export class BridgeService {
       sourceChainId
     ) as Contract;
 
-
+    console.log({sourceBridge});
     // const lockTokenPromise = new Promise((resolve, reject) => {
     //   sourceBridge.once(
     //     "TokenLocked",
@@ -76,11 +76,12 @@ export class BridgeService {
     //     }
     //   );
     // });
-
+    const signer = this.chainService.getSigner(sourceChainId);
+    console.log({signer});
     const tokenContract = new ethers.Contract(
       token,
       ["function approve(address spender, uint256 amount) returns (bool)"],
-      this.chainService.getSigner(sourceChainId)
+      signer
     );
 
     const approveTx = await tokenContract.approve(sourceBridge.target, amount);

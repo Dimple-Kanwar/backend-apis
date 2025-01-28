@@ -9,7 +9,7 @@ npx hardhat help
 npx hardhat test
 REPORT_GAS=true npx hardhat test
 npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.ts
+npx hardhat ignition deploy ./ignition/modules/Bridge.ts --network base_sepolia
 ```
 
 ## Local setup instructions:
@@ -26,3 +26,9 @@ setup .env file:
 
     npm run test
 
+
+curl --request POST \
+    --header 'content-type: application/json' \
+    --header 'x-api-key: Bu4mVCiLmyeeA7xOVVEicLa30mWqyS+n0Ih1HMJNB8wxNzM4MDcyMTk0MTUy' \
+    --url http://localhost:4000/graphql \
+    --data '{"query":"mutation BridgeToken($input: ApiKeyInput!) {\n  generateApiKey(input: $input)\n}","variables":{"input":{"clientName":"Dimple","rateLimit":1000}}}'

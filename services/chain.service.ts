@@ -1,4 +1,4 @@
-import { ethers, Signer, Contract, BaseContract } from "ethers";
+import { ethers, Signer, Contract, BaseContract, Wallet } from "ethers";
 import { ChainConfig } from "../types";
 import { abi as BridgeABI } from "../artifacts/contracts/Bridge.sol/Bridge.json";
 import { CHAIN_CONFIGS } from '../config/chains';
@@ -20,7 +20,8 @@ export class ChainService {
     for (const [chainId, config] of Object.entries(this.configs)) {
       const provider = new ethers.JsonRpcProvider(config.rpcUrl);
       this.providers.set(Number(chainId), provider);
-
+      const admin = new Wallet(process.env.ADMIN_ACCOUNT_PK!);
+      this.setSigner(Number(chainId), admin);
       const bridgeContract = new ethers.Contract(
         config.bridgeAddress,
         BridgeABI,

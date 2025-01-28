@@ -25,7 +25,6 @@ async function startServer() {
     try {
         // Load GraphQL schema
         const schema = loadSchema();
-        console.log({schema});
         // Set up Apollo Server
         const server = new ApolloServer({
             schema,

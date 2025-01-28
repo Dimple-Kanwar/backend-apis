@@ -6,9 +6,9 @@ export class TransactionService {
         const transaction = new Transaction(data);
         await transaction.save();
 
-        pubsub.publish(`TRANSACTION_UPDATED_${data.sender.toLowerCase()}`, {
-            bridgeTransactionUpdated: transaction
-        });
+        // pubsub.publish(`TRANSACTION_UPDATED_${data.sender.toLowerCase()}`, {
+        //     bridgeTransactionUpdated: transaction
+        // });
 
         return transaction;
     }

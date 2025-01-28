@@ -25,7 +25,6 @@ type BridgeTransaction {
   amount: String!
   sender: String!
   recipient: String!
-  nonce: String!
   sourceTxHash: String
   targetTxHash: String
   status: TransactionStatus!
@@ -55,15 +54,22 @@ type Query {
     status: TransactionStatus
   ): [BridgeTransaction!]!
 }
+type BridgeRequest {
+  token: String!
+  sourceChainId: Int!
+  targetChainId: Int!
+  amount: String!,
+  sender: String!
+  recipient: String!
+}
 
 type Mutation {
-  bridgeToken(
-    sourceChainId: Int!
-    targetChainId: Int!
-    token: String!
-    amount: String!
-    recipient: String!
-  ): BridgeTokenResponse!
+  bridgeToken(token: String!
+  sourceChainId: Int!
+  targetChainId: Int!
+  amount: String!,
+  sender: String!
+  recipient: String!): BridgeTokenResponse!
 }
 
 type Subscription {

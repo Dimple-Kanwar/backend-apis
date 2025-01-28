@@ -18,7 +18,6 @@ export function loadSchema(): GraphQLSchema {
 
     // Load schema from .graphql file
     const schemaFile = path.join(__dirname, 'schema.graphql');
-    console.log({ schemaFile })
     const typeDefs = fs.readFileSync(schemaFile, 'utf8');
 
     // Create executable schema

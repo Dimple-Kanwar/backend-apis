@@ -83,16 +83,21 @@ export class BridgeService {
       ["function approve(address spender, uint256 amount) returns (bool)"],
       signer
     );
-
+    console.log({tokenContract});
     const approveTx = await tokenContract.approve(sourceBridge.target, amount);
+    console.log({approveTx});
     await approveTx.wait();
-
+    console.log({token,
+      amount: ethers.parseEther(amount),
+      targetChainId,
+      recipient});
     const tx = await sourceBridge.lockTokens(
       token,
-      amount,
+      ethers.parseEther(amount),
       targetChainId,
       recipient
     );
+    console.log({tx});
     await tx.wait();
 
     // await lockTokenPromise;

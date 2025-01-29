@@ -3,6 +3,9 @@ import { loadSchema } from '../schema/schema';
 // import { Transaction } from './models/Transaction';
 import { expect } from 'chai';
 import { CHAIN_CONFIGS } from '../config/chains';
+import { ethers } from 'hardhat';
+import { ContractTransactionResponse, Wallet } from 'ethers';
+import { Bridge, BridgeValidator, MockERC20Token } from '../typechain-types';
 
 const schema = loadSchema();
 const testServer = new ApolloServer({
@@ -10,30 +13,110 @@ const testServer = new ApolloServer({
 });
 
 describe.only('Bridge API', () => {
+    let sourceChainBridge: Bridge & { deploymentTransaction(): ContractTransactionResponse; }
+    let targetChainBridge: Bridge & { deploymentTransaction(): ContractTransactionResponse; }
+    let sourceValidatorContract: BridgeValidator & { deploymentTransaction(): ContractTransactionResponse; };
+    let targetValidatorContract: BridgeValidator & { deploymentTransaction(): ContractTransactionResponse; };
+    let sourceTokenContract;
+    let targetTokenContract;
+
+    const sourceChainId = 84532;
+    const targetChainId = 31;
+    const sourceChainRPC = process.env.BASE_TESTNET_RPC;
+    const targetChainRPC = process.env.ROOTSTOCK_TESTNET_RPC;
+    const owner = process.env.ADMIN_ACCOUNT_PK;
+    let sourceToken: string;
+    let targetToken;
+    const OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("OPERATOR_ROLE"));
+    const sender = new Wallet(process.env.USER1_PK!);
+    const recipient = new Wallet(process.env.USER2_PK!);
+    const validator = new Wallet(process.env.VALIDATOR_ACCOUNT_PK!);
+    const amount = "1"; // 1 USDT
+    const formattedAmount = ethers.formatUnits("1", 6); // 1 USDT
+
+    before(async function () {
+
+        // Get signers for both the chains
+        const sourceProvider = new ethers.JsonRpcProvider(sourceChainRPC);
+        const sourceAdmin = new Wallet(owner!, sourceProvider);
+        const targetProvider = new ethers.JsonRpcProvider(targetChainRPC);
+        const targetAdmin = new Wallet(owner!, targetProvider);
+        const sourceValidator = validator.connect(sourceProvider);
+        const targetValidator = validator.connect(targetProvider);
+
+        // deploy mock ERC20 token on source chain
+        const MockERC20SourceToken = (await ethers.getContractFactory("MockERC20Token")).connect(sourceAdmin);
+        sourceTokenContract = await MockERC20SourceToken.deploy("USD Token", "USDT", 6)
+        sourceToken = await sourceTokenContract.getAddress();
+        console.log({sourceToken});
+
+        // deploy mock ERC20 token on target chain
+        const MockERC20TargetToken = (await ethers.getContractFactory("MockERC20Token")).connect(targetAdmin);
+        targetTokenContract = await MockERC20TargetToken.deploy("USD Token", "USDT", 6);
+        targetToken = await targetTokenContract.getAddress();
+        console.log({targetToken});
+
+        // Mint tokens to users
+        await sourceTokenContract.mint(sender, ethers.parseEther("1000"));
+        await targetTokenContract.mint(recipient, ethers.parseEther("1000"));
+
+        // Deploy validator on source chain
+        const BridgeValidator = await ethers.getContractFactory("BridgeValidator");
+        sourceValidatorContract = await BridgeValidator.deploy(sourceValidator.address);
+        await sourceValidatorContract.waitForDeployment();
+        const sourceValidatorContractAddress = await sourceValidatorContract.getAddress();
+        console.log({sourceValidatorContractAddress});
+
+        // Deploy validator on target chain
+        targetValidatorContract = await BridgeValidator.deploy(targetValidator.address);
+        await targetValidatorContract.waitForDeployment();
+        const targetValidatorContractAddress = await targetValidatorContract.getAddress();
+        console.log({targetValidatorContractAddress});
+        
+        // Deploy bridge
+        const Bridge = await ethers.getContractFactory("Bridge");
+        sourceChainBridge = await Bridge.deploy(sourceValidatorContractAddress, sourceChainId);
+        const sourceChainBridgeAddress = await sourceChainBridge.getAddress();
+        console.log({sourceChainBridgeAddress});
+
+        targetChainBridge = await Bridge.deploy(targetValidatorContractAddress, targetChainId);
+        const targetChainBridgeAddress = await targetChainBridge.getAddress();
+        console.log({targetChainBridgeAddress});
+
+
+        // Grant operator role
+        await sourceChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
+        await targetChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
+
+        // sender approves decimal account to spend amount of token on source chain
+        await sourceTokenContract.connect(sender).approve(owner!, formattedAmount);
+        // recipient approves decimal account to spend amount of token on target chain
+        await targetTokenContract.connect(recipient).approve(owner!, formattedAmount);
+    });
+
+
     it('should lock tokens', async () => {
         const bridgeRequest = {
-            token: "0xToken",
-            sourceChainId: 421614,
-            targetChainId: 84532,
-            amount: "1",
-            sender: "0x865639b103B5cb25Db1C8703a02a64449dA4d038",
-            recipient: "0x0500DE79c6Aa801936cA05D798C9E7468b6739C6"
+            sourceChainId,
+            targetChainId,
+            token: sourceToken,
+            amount,
+            sender: sender.address,
+            recipient: recipient.address
         }
         const response = await testServer.executeOperation({
             query: `
                 mutation {
-                    bridgeToken(${bridgeRequest}) {
+                    bridgeToken(token: ${bridgeRequest.token}, sourceChainId: ${bridgeRequest.sourceChainId}, targetChainId: ${bridgeRequest.targetChainId}, amount: ${bridgeRequest.amount}, sender: ${bridgeRequest.sender}, recipient: ${bridgeRequest.recipient}) {
                         id
-                        sender
-                        token
-                        amount
-                        targetChainTxHash
+                        error
+                        transactionHash
                         status
                     }
                 }
             `,
         });
-        console.log({res: JSON.stringify(response)});
+        console.log({ res: JSON.stringify(response) });
         // expect(response.body?.lockTokens).toHaveProperty('id');
         // expect(response.data?.lockTokens.sender).toBe('0xSender');
         // expect(response.data?.lockTokens.token).toBe('0xToken');

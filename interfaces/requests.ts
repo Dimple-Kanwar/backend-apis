@@ -11,7 +11,7 @@ export interface BridgeRequest {
     token: string
     sourceChainId: number
     targetChainId: number
-    amount: String,
-    sender: String
-    recipient: String
+    amount: string,
+    sender: string
+    recipient: string
 }

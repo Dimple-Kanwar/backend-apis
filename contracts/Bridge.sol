@@ -129,7 +129,7 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         address account,
         bytes32 txHash,
         bool isLock
-    ) external onlyValidator {
+    ) external onlyAdmin {
         if (account == address(0)) revert InvalidAddress();
         if (processedHashes[txHash]) revert AlreadyProcessed();
 
@@ -145,16 +145,6 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         if (transferredInWindow[account] + amount > MAX_TRANSFER_PER_HOUR) {
             revert RateLimitExceeded();
         }
-        // Multi-sig validation
-        if (validatorSignatures[txHash][msg.sender]) revert AlreadyValidated();
-        validatorSignatures[txHash][msg.sender] = true;
-        signatureCount[txHash]++;
-
-        emit SignatureSubmitted(txHash, msg.sender);
-
-        if (signatureCount[txHash] < REQUIRED_SIGNATURES) {
-            return;
-        }
 
         // Update rate limiting data
         transferredInWindow[account] += amount;
@@ -166,6 +156,19 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
             _lockTokens(token, account, amount, txHash);
         } else {
             _releaseTokens(token, account, amount, txHash);
+        }
+    }
+
+    function signTransaction(bytes32 txHash) public onlyValidator {
+        if (processedHashes[txHash]) revert AlreadyProcessed();
+        if (validatorSignatures[txHash][msg.sender]) revert AlreadyValidated();
+        validatorSignatures[txHash][msg.sender] = true;
+        signatureCount[txHash]++;
+
+        emit SignatureSubmitted(txHash, msg.sender);
+
+        if (signatureCount[txHash] < REQUIRED_SIGNATURES) {
+            return;
         }
     }
 

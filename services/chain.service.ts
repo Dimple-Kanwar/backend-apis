@@ -19,7 +19,7 @@ export class ChainService {
 
   private initializeProviders() {
     for (const [chainId, config] of Object.entries(this.configs)) {
-      const provider = new ethers.JsonRpcProvider(config.rpcUrl, {name: "Rootstock Testnet", chainId: Number(chainId)});
+      const provider = new ethers.JsonRpcProvider(config.rpcUrl);
       this.providers.set(Number(chainId), provider);
       // console.log({provider});
       const admin = new Wallet(process.env.ADMIN_ACCOUNT_PK!, provider);

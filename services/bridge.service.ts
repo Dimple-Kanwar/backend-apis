@@ -6,6 +6,8 @@ import { EventListener } from "./events.service";
 import { Relayer } from "./relayer.service";
 import { Validator } from "./validator.service";
 import { BridgeRequest } from "../interfaces/requests";
+import { send } from "process";
+import { generateLockHash, generateNonce } from "../utils/common";
 
 export class BridgeService {
   private chainService: ChainService;
@@ -46,62 +48,36 @@ export class BridgeService {
       sourceChainId
     ) as Contract;
 
-    console.log({sourceBridge});
-    // const lockTokenPromise = new Promise((resolve, reject) => {
-    //   sourceBridge.once(
-    //     "TokenLocked",
-    //     async (
-    //       token,
-    //       sender,
-    //       amount,
-    //       recipient,
-    //       sourceChainId,
-    //       destinationChainId,
-    //       event
-    //     ) => {
-    //       try {
-    //         await this.relayer.processEvent({
-    //           token,
-    //           sender,
-    //           recipient,
-    //           amount: amount.toString(),
-    //           sourceChainId: Number(sourceChainId),
-    //           targetChainId: Number(destinationChainId),
-    //           transactionHash: event.transactionHash,
-    //         });
-    //         resolve(event);
-    //       } catch (error) {
-    //         reject(error);
-    //       }
-    //     }
-    //   );
-    // });
+    console.log({ sourceBridge });
     const signer = this.chainService.getSigner(sourceChainId);
-    console.log({signer});
+    console.log({ signer });
     const tokenContract = new ethers.Contract(
       token,
-      ["function approve(address spender, uint256 amount) returns (bool)"],
+      ["function allowance(address owner, address spender) returns (uint256)"],
       signer
     );
-    console.log({tokenContract});
-    const approveTx = await tokenContract.approve(sourceBridge.target, amount);
-    console.log({approveTx});
-    await approveTx.wait();
-    console.log({token,
+    console.log({ tokenContract });
+    const allowanceTx = await tokenContract.allowance(sender, sourceBridge.target);
+    console.log({ allowanceTx });
+    await allowanceTx.wait();
+    const nonce = await generateNonce(sender);
+    const targetChainTxHash = await generateLockHash(token, sender, recipient, ethers.parseEther(amount), nonce, sourceChainId, targetChainId);
+    console.log({
+      token,
       amount: ethers.parseEther(amount),
-      targetChainId,
-      recipient});
-    const tx = await sourceBridge.lockTokens(
+      sender,
+      targetChainTxHash,
+      isLock: true
+    });
+    const tx = await sourceBridge.executeTokenOperation(
       token,
       ethers.parseEther(amount),
-      targetChainId,
-      recipient
+      sender,
+      targetChainTxHash,
+      true
     );
-    console.log({tx});
+    console.log({ tx });
     await tx.wait();
-
-    // await lockTokenPromise;
-
     return {
       transactionHash: tx.hash,
       transactionId: transaction.id,

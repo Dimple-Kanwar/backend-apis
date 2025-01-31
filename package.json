@@ -9,7 +9,8 @@
     "deploy:arbitrum_sepolia": "npx hardhat ignition deploy ignition/modules/Bridge.ts --network arbitrum_sepolia",
     "test": "npx hardhat test",
     "dev": "nodemon index.ts",
-    "start": "ts-node index.ts"
+    "start": "ts-node index.ts",
+    "compile": "npx hardhat compile"
   },
   "keywords": [],
   "author": "",

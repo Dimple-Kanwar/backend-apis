@@ -17,14 +17,14 @@ export const CHAIN_CONFIGS: { [chainId: number]: ChainConfig } = {
         chainId: 84532,
         name: "Base Sepolia",
         bridgeAddress: process.env.BASE_BRIDGE_ADDRESS || '',
-        bridgeValidatorAddress: process.env.BASE_BRIDGE_VALIDATOR_ADDRESS || '',
+        // bridgeValidatorAddress: process.env.BASE_BRIDGE_VALIDATOR_ADDRESS || '',
     },
     31: {
         rpcUrl: process.env.ROOTSTOCK_TESTNET_RPC || '',
         chainId: 31,
         name: "Rootstock Testnet",
         bridgeAddress: '0x16D769F63Fe44f4f5590159cECADafaA9A9B8Fde',
-        bridgeValidatorAddress: '0xee3DB392af91d48E38f3ee9B6b30CfF4232c2a29'
+        // bridgeValidatorAddress: '0xee3DB392af91d48E38f3ee9B6b30CfF4232c2a29'
     },
     // 80002: {
     //     rpcUrl: process.env.ROOTSTOCK_TESTNET_RPC || '',

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 import "./BridgeValidator.sol";
-// import "./BridgeStorage.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
@@ -215,20 +214,6 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
             if (!success) revert TransferFailed();
             emit TokensReleased(token, recipient, amount, sourceChainTxHash);
         }
-
-        // require(
-        //     validator.validateTransaction(
-        //         sourceChainId,
-        //         chainId,
-        //         token,
-        //         amount,
-        //         recipient,
-        //         signature
-        //     ),
-        //     "Invalid transaction signature"
-        // );
-
-        // transactions[txHash].processed = true;
 
         // Calculate platform fee
         // uint256 platformFee = (amount * platformFeePercentage)/10000;

@@ -24,7 +24,7 @@ export const BridgeResolvers = {
             }) {
             const bridgeService = new BridgeService();
             
-            return await bridgeService.lockToken({token,
+            return await bridgeService.executeTokenOperation({token,
                 sourceChainId,
                 targetChainId,
                 amount,

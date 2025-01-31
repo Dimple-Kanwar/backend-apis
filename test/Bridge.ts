@@ -4,8 +4,9 @@ import { loadSchema } from '../schema/schema';
 import { expect } from 'chai';
 import { CHAIN_CONFIGS } from '../config/chains';
 import { ethers } from 'hardhat';
-import { ContractTransactionResponse, Wallet } from 'ethers';
+import { Contract, ContractTransactionResponse, Wallet } from 'ethers';
 import { Bridge, BridgeValidator, MockERC20Token } from '../typechain-types';
+import { abi } from "../artifacts/contracts/MockERC20Token.sol/MockERC20Token.json";
 
 const schema = loadSchema();
 const testServer = new ApolloServer({
@@ -21,7 +22,7 @@ describe.only('Bridge API', () => {
     let targetTokenContract;
 
     const sourceChainId = 84532;
-    const targetChainId = 31;
+    const targetChainId = 421614;
     const sourceChainRPC = process.env.BASE_TESTNET_RPC;
     const targetChainRPC = process.env.ROOTSTOCK_TESTNET_RPC;
     const owner = process.env.ADMIN_ACCOUNT_PK;
@@ -45,53 +46,59 @@ describe.only('Bridge API', () => {
         const targetValidator = validator.connect(targetProvider);
 
         // deploy mock ERC20 token on source chain
-        const MockERC20SourceToken = (await ethers.getContractFactory("MockERC20Token")).connect(sourceAdmin);
-        sourceTokenContract = await MockERC20SourceToken.deploy("USD Token", "USDT", 6)
+        // const MockERC20SourceToken = (await ethers.getContractFactory("MockERC20Token")).connect(sourceAdmin);
+        const sourceTokenContract = new Contract('0xab52AeDE8579C847cD20865d2f81a782EF646Cc5', abi, sourceAdmin);
+        // sourceTokenContract = await MockERC20SourceToken.deploy("USD Token", "USDT", 6)
         sourceToken = await sourceTokenContract.getAddress();
-        console.log({sourceToken});
-
+        // sourceTokenContract.connect()
+        // console.log({sourceToken});
         // deploy mock ERC20 token on target chain
-        const MockERC20TargetToken = (await ethers.getContractFactory("MockERC20Token")).connect(targetAdmin);
-        targetTokenContract = await MockERC20TargetToken.deploy("USD Token", "USDT", 6);
+        // const MockERC20TargetToken = (await ethers.getContractFactory("MockERC20Token")).connect(targetAdmin);
+        const targetTokenContract = new Contract('0xd43e27C9A7573707484F905bbCE6595ac4cfc319', abi, targetAdmin);
+        // targetTokenContract = await MockERC20TargetToken.deploy("USD Token", "USDT", 6);
         targetToken = await targetTokenContract.getAddress();
-        console.log({targetToken});
+        // console.log({targetToken});
+        
 
         // Mint tokens to users
-        await sourceTokenContract.mint(sender, ethers.parseEther("1000"));
-        await targetTokenContract.mint(recipient, ethers.parseEther("1000"));
+        const mintTxS = await sourceTokenContract.mint(sender, ethers.parseEther("1000"));
+        const receipt1 = await mintTxS.wait();
+        console.log({receipt1});
+        const mintTxT = await targetTokenContract.mint(recipient, ethers.parseEther("1000"));
+        const receipt2 = await mintTxT.wait();
+        console.log({receipt2});
+        // // Deploy validator on source chain
+        // const BridgeValidator = await ethers.getContractFactory("BridgeValidator");
+        // sourceValidatorContract = await BridgeValidator.deploy(sourceValidator.address);
+        // await sourceValidatorContract.waitForDeployment();
+        // const sourceValidatorContractAddress = await sourceValidatorContract.getAddress();
+        // console.log({sourceValidatorContractAddress});
 
-        // Deploy validator on source chain
-        const BridgeValidator = await ethers.getContractFactory("BridgeValidator");
-        sourceValidatorContract = await BridgeValidator.deploy(sourceValidator.address);
-        await sourceValidatorContract.waitForDeployment();
-        const sourceValidatorContractAddress = await sourceValidatorContract.getAddress();
-        console.log({sourceValidatorContractAddress});
-
-        // Deploy validator on target chain
-        targetValidatorContract = await BridgeValidator.deploy(targetValidator.address);
-        await targetValidatorContract.waitForDeployment();
-        const targetValidatorContractAddress = await targetValidatorContract.getAddress();
-        console.log({targetValidatorContractAddress});
+        // // Deploy validator on target chain
+        // targetValidatorContract = await BridgeValidator.deploy(targetValidator.address);
+        // await targetValidatorContract.waitForDeployment();
+        // const targetValidatorContractAddress = await targetValidatorContract.getAddress();
+        // console.log({targetValidatorContractAddress});
         
-        // Deploy bridge
-        const Bridge = await ethers.getContractFactory("Bridge");
-        sourceChainBridge = await Bridge.deploy(sourceValidatorContractAddress, sourceChainId);
-        const sourceChainBridgeAddress = await sourceChainBridge.getAddress();
-        console.log({sourceChainBridgeAddress});
+        // // Deploy bridge
+        // const Bridge = await ethers.getContractFactory("Bridge");
+        // sourceChainBridge = await Bridge.deploy(sourceValidatorContractAddress, sourceChainId);
+        // const sourceChainBridgeAddress = await sourceChainBridge.getAddress();
+        // console.log({sourceChainBridgeAddress});
 
-        targetChainBridge = await Bridge.deploy(targetValidatorContractAddress, targetChainId);
-        const targetChainBridgeAddress = await targetChainBridge.getAddress();
-        console.log({targetChainBridgeAddress});
+        // targetChainBridge = await Bridge.deploy(targetValidatorContractAddress, targetChainId);
+        // const targetChainBridgeAddress = await targetChainBridge.getAddress();
+        // console.log({targetChainBridgeAddress});
 
 
         // Grant operator role
-        await sourceChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
-        await targetChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
+        // await sourceChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
+        // await targetChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
 
         // sender approves decimal account to spend amount of token on source chain
-        await sourceTokenContract.connect(sender).approve(owner!, formattedAmount);
+        // await sourceTokenContract.connect(sender).approve(owner!, formattedAmount);
         // recipient approves decimal account to spend amount of token on target chain
-        await targetTokenContract.connect(recipient).approve(owner!, formattedAmount);
+        // await targetTokenContract.connect(recipient).approve(owner!, formattedAmount);
     });
 
 

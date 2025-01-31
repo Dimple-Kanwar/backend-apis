@@ -32,3 +32,7 @@ curl --request POST \
     --header 'x-api-key: Bu4mVCiLmyeeA7xOVVEicLa30mWqyS+n0Ih1HMJNB8wxNzM4MDcyMTk0MTUy' \
     --url http://localhost:4000/graphql \
     --data '{"query":"mutation BridgeToken($input: ApiKeyInput!) {\n  generateApiKey(input: $input)\n}","variables":{"input":{"clientName":"Dimple","rateLimit":1000}}}'
+
+                
+
+

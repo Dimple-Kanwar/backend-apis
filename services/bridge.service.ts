@@ -28,7 +28,7 @@ export class BridgeService {
     );
   }
 
-  async lockToken({ sourceChainId,
+  async executeTokenOperation({ sourceChainId,
     targetChainId,
     token,
     amount,
@@ -84,11 +84,21 @@ export class BridgeService {
     };
   }
 
-  async releaseToken(sourceChainId: number, targetChainId: number, wallet: Wallet, token: string, recipient: AddressLike, amount: number, signature: string) {
+  async releaseToken(sourceChainId: number, targetChainId: number, wallet: Wallet, token: string, recipient: string, amount: number, signature: string) {
     // Get target chain contract
     const targetContract = this.chainService.getBridgeContract(targetChainId);
     const connectedContract = targetContract.connect(wallet) as Contract;
-
+    // const nonce = await generateNonce(recipient);
+    // const targetChainTxHash = await generateLockHash(token, sender, recipient, ethers.parseEther(amount), nonce, sourceChainId, targetChainId);
+    // const tx = await targetContract.executeTokenOperation(
+    //   token,
+    //   ethers.parseEther(amount),
+    //   sender,
+    //   targetChainTxHash,
+    //   true
+    // );
+    // console.log({ tx });
+    // await tx.wait();
     // Submit release transaction
     const tx = await connectedContract.releaseToken(
       token,

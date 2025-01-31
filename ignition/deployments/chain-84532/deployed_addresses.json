@@ -1,3 +1,4 @@
 {
-  "BridgeModule#Bridge": "0x6da05625714eF4494d3a0f4bBEEd7D4AEbb896cc"
+  "BridgeModule#Bridge": "0x6da05625714eF4494d3a0f4bBEEd7D4AEbb896cc",
+  "MockERC20TokenModule#MockERC20Token": "0xab52AeDE8579C847cD20865d2f81a782EF646Cc5"
 }

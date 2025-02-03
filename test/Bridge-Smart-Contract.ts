@@ -5,7 +5,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Bridge, BridgeValidator, MockERC20 } from "../typechain-types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { generateLockHash, generateNonce } from "../utils/common";
+import { generateLockHash, generateNonce, generateReleaseHash } from "../utils/common";
 import { send } from "process";
 import { GasService } from "../services/gas.service";
 
@@ -25,6 +25,7 @@ describe.only("Bridge Contract Tests", function () {
     const owner = new Wallet(process.env.ADMIN_ACCOUNT_PK!);
     const sender = new Wallet(process.env.USER1_PK!);
     let senderProvider: Wallet | ContractRunner | null | undefined;
+    let recipientProvider: Wallet | ContractRunner | null | undefined;
     const recipient = new Wallet(process.env.USER2_PK!);
     const validator = new Wallet(process.env.VALIDATOR_ACCOUNT_PK!);
     const amount = "1"; // 1 USDT
@@ -32,7 +33,8 @@ describe.only("Bridge Contract Tests", function () {
     const targetToken = process.env.B10_TOKEN_ARBITRUM!;
     const formattedAmount = ethers.parseEther(amount); // 1 USDT
     let sourceProvider: Provider | JsonRpcProvider | null;
-    let targetProvider;
+    let targetProvider: Provider | JsonRpcProvider | null;
+
     before(async function () {
         // Get signers for both the chains
         sourceProvider = new ethers.JsonRpcProvider(sourceChainRPC);
@@ -42,6 +44,7 @@ describe.only("Bridge Contract Tests", function () {
         const sourceValidator = validator.connect(sourceProvider);
         const targetValidator = validator.connect(targetProvider);
         senderProvider = sender.connect(sourceProvider);
+        recipientProvider = recipient.connect(targetProvider);
         // Connect to bridge contracts
         sourceChainBridge = new Contract(sourceBridgeAddress, bridgeAbi, sourceAdmin) as unknown as Bridge;
         targetChainBridge = new Contract(targetBridgeAddress, bridgeAbi, targetAdmin) as unknown as Bridge;
@@ -60,201 +63,222 @@ describe.only("Bridge Contract Tests", function () {
         // console.log({ receipt2 });
     });
 
-    describe("Deployment", function () {
-        it("Should set the correct owner address", async function () {
-            expect(await sourceChainBridge.owner()).to.equal(owner);
-        });
-
-        it("Should set owner as the correct admin address", async function () {
-            expect(await sourceChainBridge.admin()).to.equal(owner);
-        });
-
-        it("Should set owner as the correct validator address in source chain", async function () {
-            const isValidator = await sourceChainBridge.validators(owner);
-            expect(isValidator).to.equal(true);
-        });
-
-        it("Should set owner as the correct validator address in target chain", async function () {
-            const isValidator = await targetChainBridge.validators(owner);
-            expect(isValidator).to.equal(true);
-        });
-
-
-        it("Should have sufficient balance in sender account", async function () {
-            expect(await sourceTokenContract.balanceOf(sender)).to.greaterThanOrEqual(amount);
-        });
-
-        it("Should have sufficient balance in recipient account", async function () {
-            expect(await targetTokenContract.balanceOf(recipient)).to.greaterThanOrEqual(amount);
-        });
-
-        it("Should have only 1 validator", async function () {
-            expect(Number(await sourceChainBridge.validatorCount())).to.eq(1);
-        });
-    });
-
-    describe("Token Locking", function () {
-
-        // it("Sender Should have sufficient funds to run approval", async function () {
-        //     const balance = await senderProvider?.provider?.getBalance(sender.address);
-        //     console.log({ balance });
-        //     const gasService = new GasService(senderProvider?.provider!);
-        //     const estimateGas = gasService.estimateGasLimit(sourceToken, "approve", [sourceBridgeAddress, formattedAmount] )
-        //     console.log({ estimateGas });
-        //     expect(estimateGas).to.greaterThanOrEqual(balance);
-        // });
-
-        it("Sender Should have sufficient tokens to bridge", async function () {
-            const balance = await sourceTokenContract.connect(senderProvider).balanceOf(sender.address);
-            console.log({ balance });
-            expect(balance).to.greaterThanOrEqual(formattedAmount);
-        });
-
-        it("Sender should approve the amount to bridge", async function () {
-            const approvalTx = await sourceTokenContract.connect(senderProvider).approve(sourceBridgeAddress, formattedAmount);
-            await approvalTx.wait();
-            await expect(approvalTx).to.emit(sourceTokenContract, "Approval")
-                .withArgs(sender.address, sourceBridgeAddress, formattedAmount);
-        });
-
-        it("Should lock tokens successfully", async function () {
-            const nonce = await generateNonce(sender.address);
-            const targetChainTxHash = await generateLockHash(sourceToken, sender.address, recipient.address, formattedAmount, nonce, sourceChainId, targetChainId);
-            const tx = await sourceChainBridge.connect(owner.connect(sourceProvider)).executeTokenOperation(
-                sourceToken,
-                formattedAmount,
-                sender.address,
-                targetChainTxHash,
-                true
-            );
-            await tx.wait();
-            await expect(tx).to.emit(sourceChainBridge, "TokensLocked")
-                .withArgs(sourceToken, sender.address, formattedAmount, targetChainTxHash);
-        });
-
-        it("Source Bridge should have the token balance", async function () {
-            expect(await sourceTokenContract.balanceOf(await sourceChainBridge.getAddress())).to.greaterThanOrEqual(formattedAmount);
-        });
-
-        // ignore below comments for now
-        // it("Should fail when locking 0 tokens", async function () {
-        //     await expect(bridge.connect(sender).lockTokens(
-        //         await token.getAddress(),
-        //         0,
-        //         destChainId,
-        //         recipient.address
-        //     )).to.be.revertedWith("Amount must be greater than 0");
-        // });
-
-        // it("Should fail when recipient is zero address", async function () {
-        //     await expect(bridge.connect(sender).lockTokens(
-        //         await token.getAddress(),
-        //         formattedAmount,
-        //         destChainId,
-        //         ethers.ZeroAddress
-        //     )).to.be.revertedWith("Invalid recipient");
-        // });
-
-        // it("Should fail when destination chain is same as source", async function () {
-        //     await expect(bridge.connect(sender).lockTokens(
-        //         await token.getAddress(),
-        //         formattedAmount,
-        //         sourceChainId,
-        //         recipient.address
-        //     )).to.be.revertedWith("Invalid destination chain");
-        // });
-
-        // it("Should fail when contract is paused", async function () {
-        //     await bridge.pause();
-        //     await expect(bridge.connect(sender).lockTokens(
-        //         await token.getAddress(),
-        //         formattedAmount,
-        //         destChainId,
-        //         recipient.address
-        //     )).to.be.revertedWith("Pausable: paused");
-        // });
-    });
-
-    // describe("Token Release", function () {
-    //     const releaseAmount = ethers.parseEther("100");
-    //     let signature: any;
-
-    //     beforeEach(async function () {
-    //         // Lock tokens first
-    //         await token.connect(user1).approve(await bridge.getAddress(), releaseAmount);
-    //         await bridge.connect(user1).lockTokens(
-    //             await token.getAddress(),
-    //             releaseAmount,
-    //             destChainId,
-    //             user2.address
-    //         );
-
-    //         // Create and sign message
-    //         const message = ethers.solidityPackedKeccak256(
-    //             ["uint256", "uint256", "address", "uint256", "address"],
-    //             [sourceChainId, destChainId, await token.getAddress(), releaseAmount, user2.address]
-    //         );
-    //         const messageHashBytes = ethers.getBytes(message);
-    //         signature = await validatorSigner.signMessage(messageHashBytes);
+    // describe("Deployment", function () {
+    //     it("Should set the correct owner address", async function () {
+    //         expect(await sourceChainBridge.owner()).to.equal(owner);
     //     });
 
-    //     it("Should release tokens successfully", async function () {
-    //         await expect(bridge.connect(operator).releaseToken(
-    //             sourceChainId,
-    //             await token.getAddress(),
-    //             releaseAmount,
-    //             user2.address,
-    //             signature
-    //         )).to.emit(bridge, "TokensReleased")
-    //             .withArgs(await token.getAddress(), user2.address, releaseAmount);
-
-    //         expect(await token.balanceOf(user2.address)).to.equal(releaseAmount);
+    //     it("Should set owner as the correct admin address", async function () {
+    //         expect(await sourceChainBridge.admin()).to.equal(owner);
     //     });
 
-    //     it("Should fail with invalid signature", async function () {
-    //         const invalidSig = await user1.signMessage(
-    //             ethers.getBytes(ethers.randomBytes(32))
-    //         );
-
-    //         await expect(bridge.connect(operator).releaseToken(
-    //             sourceChainId,
-    //             await token.getAddress(),
-    //             releaseAmount,
-    //             user2.address,
-    //             invalidSig
-    //         )).to.be.revertedWith("Invalid transaction signature");
+    //     it("Should set owner as the correct validator address in source chain", async function () {
+    //         const isValidator = await sourceChainBridge.validators(owner);
+    //         expect(isValidator).to.equal(true);
     //     });
 
-    //     it("Should fail when called by non-operator", async function () {
-    //         await expect(bridge.connect(user1).releaseToken(
-    //             sourceChainId,
-    //             await token.getAddress(),
-    //             releaseAmount,
-    //             user2.address,
-    //             signature
-    //         )).to.be.revertedWith(
-    //             `AccessControl: account ${user1.address.toLowerCase()} is missing role ${OPERATOR_ROLE}`
-    //         );
+    //     it("Should set owner as the correct validator address in target chain", async function () {
+    //         const isValidator = await targetChainBridge.validators(owner);
+    //         expect(isValidator).to.equal(true);
     //     });
 
-    //     it("Should fail when processing same transaction twice", async function () {
-    //         await bridge.connect(operator).releaseToken(
-    //             sourceChainId,
-    //             await token.getAddress(),
-    //             releaseAmount,
-    //             user2.address,
-    //             signature
-    //         );
 
-    //         await expect(bridge.connect(operator).releaseToken(
-    //             sourceChainId,
-    //             await token.getAddress(),
-    //             releaseAmount,
-    //             user2.address,
-    //             signature
-    //         )).to.be.revertedWith("Transaction already processed");
+    //     it("Should have sufficient balance in sender account", async function () {
+    //         expect(await sourceTokenContract.balanceOf(sender)).to.greaterThanOrEqual(amount);
+    //     });
+
+    //     it("Should have sufficient balance in recipient account", async function () {
+    //         expect(await targetTokenContract.balanceOf(recipient)).to.greaterThanOrEqual(amount);
+    //     });
+
+    //     it("Should have only 1 validator", async function () {
+    //         expect(Number(await sourceChainBridge.validatorCount())).to.eq(1);
     //     });
     // });
+
+    // describe("Token Locking", function () {
+
+    //     // it("Sender Should have sufficient funds to run approval", async function () {
+    //     //     const balance = await senderProvider?.provider?.getBalance(sender.address);
+    //     //     console.log({ balance });
+    //     //     const gasService = new GasService(senderProvider?.provider!);
+    //     //     const estimateGas = gasService.estimateGasLimit(sourceToken, "approve", [sourceBridgeAddress, formattedAmount] )
+    //     //     console.log({ estimateGas });
+    //     //     expect(estimateGas).to.greaterThanOrEqual(balance);
+    //     // });
+
+    //     it("Sender Should have sufficient tokens to bridge", async function () {
+    //         const balance = await sourceTokenContract.connect(senderProvider).balanceOf(sender.address);
+    //         console.log({ balance });
+    //         expect(balance).to.greaterThanOrEqual(formattedAmount);
+    //     });
+
+    //     it("Sender should approve the amount to bridge", async function () {
+    //         const approvalTx = await sourceTokenContract.connect(senderProvider).approve(sourceBridgeAddress, formattedAmount);
+    //         await approvalTx.wait();
+    //         await expect(approvalTx).to.emit(sourceTokenContract, "Approval")
+    //             .withArgs(sender.address, sourceBridgeAddress, formattedAmount);
+    //     });
+
+    //     it("Should lock tokens successfully", async function () {
+    //         const nonce = await generateNonce(sender.address);
+    //         const targetChainTxHash = await generateLockHash(sourceToken, sender.address, recipient.address, formattedAmount, nonce, sourceChainId, targetChainId);
+    //         const tx = await sourceChainBridge.connect(owner.connect(sourceProvider)).executeTokenOperation(
+    //             sourceToken,
+    //             formattedAmount,
+    //             sender.address,
+    //             targetChainTxHash,
+    //             true
+    //         );
+    //         await tx.wait();
+    //         await expect(tx).to.emit(sourceChainBridge, "TokensLocked")
+    //             .withArgs(sourceToken, sender.address, formattedAmount, targetChainTxHash);
+    //     });
+
+    //     it("Source Bridge should have the token balance", async function () {
+    //         expect(await sourceTokenContract.balanceOf(await sourceChainBridge.getAddress())).to.greaterThanOrEqual(formattedAmount);
+    //     });
+
+    //     // ignore below comments for now
+    //     // it("Should fail when locking 0 tokens", async function () {
+    //     //     await expect(bridge.connect(sender).lockTokens(
+    //     //         await token.getAddress(),
+    //     //         0,
+    //     //         destChainId,
+    //     //         recipient.address
+    //     //     )).to.be.revertedWith("Amount must be greater than 0");
+    //     // });
+
+    //     // it("Should fail when recipient is zero address", async function () {
+    //     //     await expect(bridge.connect(sender).lockTokens(
+    //     //         await token.getAddress(),
+    //     //         formattedAmount,
+    //     //         destChainId,
+    //     //         ethers.ZeroAddress
+    //     //     )).to.be.revertedWith("Invalid recipient");
+    //     // });
+
+    //     // it("Should fail when destination chain is same as source", async function () {
+    //     //     await expect(bridge.connect(sender).lockTokens(
+    //     //         await token.getAddress(),
+    //     //         formattedAmount,
+    //     //         sourceChainId,
+    //     //         recipient.address
+    //     //     )).to.be.revertedWith("Invalid destination chain");
+    //     // });
+
+    //     // it("Should fail when contract is paused", async function () {
+    //     //     await bridge.pause();
+    //     //     await expect(bridge.connect(sender).lockTokens(
+    //     //         await token.getAddress(),
+    //     //         formattedAmount,
+    //     //         destChainId,
+    //     //         recipient.address
+    //     //     )).to.be.revertedWith("Pausable: paused");
+    //     // });
+    // });
+
+    describe("Token Release", function () {
+        //     let signature: any;
+
+        // beforeEach(async function () {
+        //     // Lock tokens first
+        //     // Create and sign message
+        //     const message = ethers.solidityPackedKeccak256(
+        //         ["uint256", "uint256", "address", "uint256", "address"],
+        //         [sourceChainId, destChainId, await token.getAddress(), releaseAmount, user2.address]
+        //     );
+        //     const messageHashBytes = ethers.getBytes(message);
+        //     signature = await validatorSigner.signMessage(messageHashBytes);
+        // });
+        // it("Sender Should have sufficient funds to run approval", async function () {
+        //     //     const balance = await senderProvider?.provider?.getBalance(sender.address);
+        //     //     console.log({ balance });
+        //     //     const gasService = new GasService(senderProvider?.provider!);
+        //     //     const estimateGas = gasService.estimateGasLimit(sourceToken, "approve", [sourceBridgeAddress, formattedAmount] )
+        //     //     console.log({ estimateGas });
+        //     //     expect(estimateGas).to.greaterThanOrEqual(balance);
+        //     // });
+
+        // it("Provide liquidity to target bridge", async function () {
+        //     const gas = await targetTokenContract.connect(recipientProvider).approve.estimateGas(targetBridgeAddress, formattedAmount);
+        //     console.log({gas});
+        //     console.log({gas1: ethers.parseUnits(gas.toString(),"ether")});
+        //     const balance = await targetTokenContract.connect(recipientProvider).balanceOf(recipient.address);
+        //     console.log({balance});
+        //     const approvalTx = await targetTokenContract.connect(recipientProvider).approve(targetBridgeAddress, formattedAmount);
+        //     console.log({approvalTx});
+        //     await approvalTx.wait();
+        //     await expect(approvalTx).to.emit(targetTokenContract, "Approval")
+        //         .withArgs(recipient.address, targetBridgeAddress, formattedAmount);
+        //     expect(await targetTokenContract.transferFrom(recipient.address, targetBridgeAddress, formattedAmount)).to.emit(targetTokenContract, "Transfer").withArgs(recipient.address, targetBridgeAddress, formattedAmount);
+        // });
+
+        it("Target Bridge should have sufficient liquidity", async function () {
+            expect(await targetTokenContract.balanceOf(targetBridgeAddress)).to.greaterThanOrEqual(formattedAmount);
+        })
+
+        it("Should release tokens successfully", async function () {
+            const nonce = await generateNonce(sender.address);
+            const lockTxHash = '0x4f4614075c2d27c11dd74cd2a7f8fbdc39f007f118ec41a78451f683a5bc6006';
+            const sourceChainTxHash = await generateReleaseHash(targetToken, sender.address, recipient.address, formattedAmount, nonce, lockTxHash, sourceChainId, targetChainId);
+            const tx = await targetChainBridge.executeTokenOperation(
+                targetToken,
+                formattedAmount,
+                recipient.address,
+                sourceChainTxHash,
+                false
+            );
+            await tx.wait();
+            await expect(tx).to.emit(targetChainBridge, "TokensReleased")
+                .withArgs(targetToken, recipient.address, formattedAmount, sourceChainTxHash);
+            expect(await targetTokenContract.balanceOf(recipient.address)).to.greaterThanOrEqual(formattedAmount);
+        });
+
+        //     it("Should fail with invalid signature", async function () {
+        //         const invalidSig = await user1.signMessage(
+        //             ethers.getBytes(ethers.randomBytes(32))
+        //         );
+
+        //         await expect(bridge.connect(operator).releaseToken(
+        //             sourceChainId,
+        //             await token.getAddress(),
+        //             releaseAmount,
+        //             user2.address,
+        //             invalidSig
+        //         )).to.be.revertedWith("Invalid transaction signature");
+        //     });
+
+        //     it("Should fail when called by non-operator", async function () {
+        //         await expect(bridge.connect(user1).releaseToken(
+        //             sourceChainId,
+        //             await token.getAddress(),
+        //             releaseAmount,
+        //             user2.address,
+        //             signature
+        //         )).to.be.revertedWith(
+        //             `AccessControl: account ${user1.address.toLowerCase()} is missing role ${OPERATOR_ROLE}`
+        //         );
+        //     });
+
+        //     it("Should fail when processing same transaction twice", async function () {
+        //         await bridge.connect(operator).releaseToken(
+        //             sourceChainId,
+        //             await token.getAddress(),
+        //             releaseAmount,
+        //             user2.address,
+        //             signature
+        //         );
+
+        //         await expect(bridge.connect(operator).releaseToken(
+        //             sourceChainId,
+        //             await token.getAddress(),
+        //             releaseAmount,
+        //             user2.address,
+        //             signature
+        //         )).to.be.revertedWith("Transaction already processed");
+        //     });
+    });
 
     // describe("Access Control", function () {
     //     it("Should allow admin to pause/unpause", async function () {

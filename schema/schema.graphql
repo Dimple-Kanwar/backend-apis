@@ -52,6 +52,9 @@ enum TransactionStatus {
 type BridgeTokenResponse {
   success: Boolean!
   transactionHash: String
+  sourceTxHash: String
+  targetTxHash: String
+  status: String!
   error: String
 }
 
@@ -81,6 +84,10 @@ type BridgeRequest {
 }
 
 type Mutation {
+  generateApiKey(input: ApiKeyInput!): String!
+  deactivateApiKey(key: String!): Boolean!
+  updateRateLimit(key: String!, newLimit: Int!): Boolean!
+  resetApiKey(key: String!): String
   bridgeToken(
     token: String!
     sourceChainId: Int!
@@ -89,12 +96,27 @@ type Mutation {
     sender: String!
     recipient: String!
   ): BridgeTokenResponse!
-  generateApiKey(input: ApiKeyInput!): String!
-  deactivateApiKey(key: String!): Boolean!
-  updateRateLimit(key: String!, newLimit: Int!): Boolean!
-  resetApiKey(key: String!): String
 }
 
 type Subscription {
   bridgeTransactionUpdated(address: String!): BridgeTransaction!
+}
+input BridgeTokenInput {
+  token: String! # Token address
+  sourceChainId: Int! # Source chain ID
+  targetChainId: Int! # Target chain ID
+  amount: String! # Amount in wei
+  sender: String! # Sender address
+  recipient: String! # Recipient address
+}
+
+type BridgeResponse {
+  success: Boolean!
+  transactionHash: String
+  sourceTxHash: String
+  targetTxHash: String
+  status: String!
+  error: String
+  signatures: [String!]
+  validatorAddresses: [String!]
 }

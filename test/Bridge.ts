@@ -5,116 +5,111 @@ import { expect } from 'chai';
 import { CHAIN_CONFIGS } from '../config/chains';
 import { ethers } from 'hardhat';
 import { Contract, ContractTransactionResponse, Wallet } from 'ethers';
-import { Bridge, BridgeValidator, MockERC20Token } from '../typechain-types';
-import { abi } from "../artifacts/contracts/MockERC20Token.sol/MockERC20Token.json";
+import { Bridge, BridgeValidator, MockERC20, MockERC20Token } from '../typechain-types';
+import { abi as tokenAbi } from "../artifacts/contracts/MockERC20Token.sol/MockERC20Token.json";
+import { abi as bridgeAbi } from "../artifacts/contracts/Bridge.sol/Bridge.json";
 
 const schema = loadSchema();
 const testServer = new ApolloServer({
     schema
 });
 
-describe.only('Bridge API', () => {
-    let sourceChainBridge: Bridge & { deploymentTransaction(): ContractTransactionResponse; }
-    let targetChainBridge: Bridge & { deploymentTransaction(): ContractTransactionResponse; }
-    let sourceValidatorContract: BridgeValidator & { deploymentTransaction(): ContractTransactionResponse; };
-    let targetValidatorContract: BridgeValidator & { deploymentTransaction(): ContractTransactionResponse; };
-    let sourceTokenContract;
-    let targetTokenContract;
-
+describe('Bridge API', () => {
+    let sourceChainBridge: Bridge;
+    let targetChainBridge: Bridge;
+    let sourceTokenContract: MockERC20;
+    let targetTokenContract: MockERC20;
+    const sourceBridgeAddress = process.env.BASE_BRIDGE_ADDRESS!;
+    const targetBridgeAddress = process.env.ARBITRUM_BRIDGE_ADDRESS!;
     const sourceChainId = 84532;
     const targetChainId = 421614;
     const sourceChainRPC = process.env.BASE_TESTNET_RPC;
-    const targetChainRPC = process.env.ROOTSTOCK_TESTNET_RPC;
-    const owner = process.env.ADMIN_ACCOUNT_PK;
-    let sourceToken: string;
-    let targetToken;
-    const OPERATOR_ROLE = ethers.keccak256(ethers.toUtf8Bytes("OPERATOR_ROLE"));
+    const targetChainRPC = process.env.ARBITRUM_TESTNET_RPC;
+    const owner = new Wallet(process.env.ADMIN_ACCOUNT_PK!);
     const sender = new Wallet(process.env.USER1_PK!);
     const recipient = new Wallet(process.env.USER2_PK!);
     const validator = new Wallet(process.env.VALIDATOR_ACCOUNT_PK!);
     const amount = "1"; // 1 USDT
-    const formattedAmount = ethers.formatUnits("1", 6); // 1 USDT
+    const sourceToken = process.env.B10_TOKEN_BASE!;
+    const targetToken = process.env.B10_TOKEN_ARBITRUM!;
+    const formattedAmount = ethers.parseEther(amount); // 1 USDT
+    console.log({ formattedAmount });
 
     before(async function () {
-
         // Get signers for both the chains
         const sourceProvider = new ethers.JsonRpcProvider(sourceChainRPC);
-        const sourceAdmin = new Wallet(owner!, sourceProvider);
+        const sourceAdmin = owner.connect(sourceProvider);
         const targetProvider = new ethers.JsonRpcProvider(targetChainRPC);
-        const targetAdmin = new Wallet(owner!, targetProvider);
+        const targetAdmin = owner.connect(targetProvider);
         const sourceValidator = validator.connect(sourceProvider);
         const targetValidator = validator.connect(targetProvider);
 
+        // Connect to bridge contracts
+        sourceChainBridge = new Contract(sourceBridgeAddress, bridgeAbi, sourceAdmin) as unknown as Bridge;
+        targetChainBridge = new Contract(targetBridgeAddress, bridgeAbi, sourceAdmin) as unknown as Bridge;
+
         // deploy mock ERC20 token on source chain
-        // const MockERC20SourceToken = (await ethers.getContractFactory("MockERC20Token")).connect(sourceAdmin);
-        const sourceTokenContract = new Contract('0xab52AeDE8579C847cD20865d2f81a782EF646Cc5', abi, sourceAdmin);
-        // sourceTokenContract = await MockERC20SourceToken.deploy("USD Token", "USDT", 6)
-        sourceToken = await sourceTokenContract.getAddress();
-        // sourceTokenContract.connect()
-        // console.log({sourceToken});
-        // deploy mock ERC20 token on target chain
-        // const MockERC20TargetToken = (await ethers.getContractFactory("MockERC20Token")).connect(targetAdmin);
-        const targetTokenContract = new Contract('0xd43e27C9A7573707484F905bbCE6595ac4cfc319', abi, targetAdmin);
-        // targetTokenContract = await MockERC20TargetToken.deploy("USD Token", "USDT", 6);
-        targetToken = await targetTokenContract.getAddress();
-        // console.log({targetToken});
-        
+        sourceTokenContract = new Contract(sourceToken, tokenAbi, sourceAdmin) as unknown as MockERC20;
+        targetTokenContract = new Contract(targetToken, tokenAbi, targetAdmin) as unknown as MockERC20;
+
 
         // Mint tokens to users
-        const mintTxS = await sourceTokenContract.mint(sender, ethers.parseEther("1000"));
-        const receipt1 = await mintTxS.wait();
-        console.log({receipt1});
-        const mintTxT = await targetTokenContract.mint(recipient, ethers.parseEther("1000"));
-        const receipt2 = await mintTxT.wait();
-        console.log({receipt2});
-        // // Deploy validator on source chain
-        // const BridgeValidator = await ethers.getContractFactory("BridgeValidator");
-        // sourceValidatorContract = await BridgeValidator.deploy(sourceValidator.address);
-        // await sourceValidatorContract.waitForDeployment();
-        // const sourceValidatorContractAddress = await sourceValidatorContract.getAddress();
-        // console.log({sourceValidatorContractAddress});
-
-        // // Deploy validator on target chain
-        // targetValidatorContract = await BridgeValidator.deploy(targetValidator.address);
-        // await targetValidatorContract.waitForDeployment();
-        // const targetValidatorContractAddress = await targetValidatorContract.getAddress();
-        // console.log({targetValidatorContractAddress});
-        
-        // // Deploy bridge
-        // const Bridge = await ethers.getContractFactory("Bridge");
-        // sourceChainBridge = await Bridge.deploy(sourceValidatorContractAddress, sourceChainId);
-        // const sourceChainBridgeAddress = await sourceChainBridge.getAddress();
-        // console.log({sourceChainBridgeAddress});
-
-        // targetChainBridge = await Bridge.deploy(targetValidatorContractAddress, targetChainId);
-        // const targetChainBridgeAddress = await targetChainBridge.getAddress();
-        // console.log({targetChainBridgeAddress});
-
-
-        // Grant operator role
-        // await sourceChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
-        // await targetChainBridge.grantRole(OPERATOR_ROLE, process.env.ADMIN_ACCOUNT_PK!);
-
-        // sender approves decimal account to spend amount of token on source chain
-        // await sourceTokenContract.connect(sender).approve(owner!, formattedAmount);
-        // recipient approves decimal account to spend amount of token on target chain
-        // await targetTokenContract.connect(recipient).approve(owner!, formattedAmount);
+        // const mintTxS = await sourceTokenContract.mint(sender, ethers.parseEther("1000"))
+        // const receipt1 = await mintTxS.wait();
+        // console.log({ receipt1 });
+        // const mintTxT = await targetTokenContract.mint(recipient, ethers.parseEther("1000"));
+        // const receipt2 = await mintTxT.wait();
+        // console.log({ receipt2 });
     });
 
+    describe("Deployment", function () {
+        it("Should set the correct owner address", async function () {
+            expect(await sourceChainBridge.owner()).to.equal(owner);
+        });
+
+        it("Should set owner as the correct admin address", async function () {
+            expect(await sourceChainBridge.admin()).to.equal(owner);
+        });
+
+        it("Should set owner as the correct validator address in source chain", async function () {
+            const isValidator = await sourceChainBridge.validators(owner);
+            console.log({ isValidator });
+            expect(isValidator).to.equal(true);
+        });
+
+        it("Should set owner as the correct validator address in target chain", async function () {
+            const isValidator = await targetChainBridge.validators(owner);
+            console.log({ isValidator });
+            expect(isValidator).to.equal(true);
+        });
+
+
+        it("Should have sufficient balance in sender account", async function () {
+            expect(await sourceTokenContract.balanceOf(sender)).to.greaterThanOrEqual(amount);
+        });
+
+        it("Should have sufficient balance in recipient account", async function () {
+            expect(await targetTokenContract.balanceOf(recipient)).to.greaterThanOrEqual(amount);
+        });
+
+        it("Should have only 1 validator", async function () {
+            expect(await sourceChainBridge.validatorCount()).to.length(1);
+        });
+    });
 
     it('should lock tokens', async () => {
         const bridgeRequest = {
             sourceChainId,
             targetChainId,
-            token: sourceToken,
-            amount,
+            sourceToken,
+            amount: formattedAmount,
             sender: sender.address,
             recipient: recipient.address
         }
         const response = await testServer.executeOperation({
             query: `
                 mutation {
-                    bridgeToken(token: ${bridgeRequest.token}, sourceChainId: ${bridgeRequest.sourceChainId}, targetChainId: ${bridgeRequest.targetChainId}, amount: ${bridgeRequest.amount}, sender: ${bridgeRequest.sender}, recipient: ${bridgeRequest.recipient}) {
+                    bridgeToken(token: ${bridgeRequest.sourceToken}, sourceChainId: ${bridgeRequest.sourceChainId}, targetChainId: ${bridgeRequest.targetChainId}, amount: ${bridgeRequest.amount}, sender: ${bridgeRequest.sender}, recipient: ${bridgeRequest.recipient}) {
                         id
                         error
                         transactionHash

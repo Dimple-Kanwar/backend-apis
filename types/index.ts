@@ -3,36 +3,50 @@ export interface ChainConfig {
     rpcUrl: string;
     chainId: number;
     bridgeAddress: string;
-    // bridgeValidatorAddress: string;
-    // supportedTokens: {
-    //     [tokenSymbol: string]: string; // token address
-    // };
+    supportedTokens: {
+        [symbol: string]: TokenConfig;
+    };
 }
 
 export interface EventData {
     token: string;
     sender: string;
-    recipient: string;
     amount: string;
-    // nonce: string;
-    sourceChainId: number;
-    targetChainId: number;
+    targetChainTxHash: number;
     transactionHash: string;
 }
 
 export interface BridgeTransaction {
     id: string;
-    sourceChainId: number;
-    targetChainId: number;
-    token: string;
-    amount: string;
-    sender: string;
-    recipient: string;
-    nonce: string;
-    sourceTxHash?: string;
-    targetTxHash?: string;
-    status: 'PENDING' | 'COMPLETED' | 'FAILED';
+    sourceChainId: Number;
+    targetChainId: Number;
+    sourceToken: String;
+    targetToken: String;
+    amount: String;
+    sender: String;
+    recipient: String;
+    nonce: String;
+    sourceTxHash: String;
+    targetDataHash: String;
+    sourceDataHash: String;
+    targetTxHash: String;
+    status: TransactionStatus;
+    errorMessage: String;
     createdAt: Date;
     updatedAt: Date;
-  }
-  
+}
+
+export interface TokenConfig {
+    symbol: string;
+    address: string;
+    decimals: number;
+    chainId: number;
+}
+
+export enum TransactionStatus {
+    PENDING = 'PENDING',
+    LOCKED = 'LOCKED',
+    RELEASING = 'RELEASING',
+    COMPLETED = 'COMPLETED',
+    FAILED = 'FAILED'
+}

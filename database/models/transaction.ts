@@ -1,19 +1,25 @@
 import mongoose from 'mongoose';
+import { TransactionStatus } from '../../types';
 
 const transactionSchema = new mongoose.Schema({
   sourceChainId: Number,
   targetChainId: Number,
-  token: String,
+  sourceToken: String,
+  targetToken: String,
   amount: String,
   sender: String,
   recipient: String,
+  nonce: String,
   sourceTxHash: String,
+  targetDataHash: String,
+  sourceDataHash: String,
   targetTxHash: String,
   status: {
     type: String,
-    enum: ['PENDING', 'COMPLETED', 'FAILED'],
+    enum: TransactionStatus,
     default: 'PENDING'
   },
+  errorMessage: String,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

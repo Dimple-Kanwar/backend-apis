@@ -164,7 +164,7 @@ describe.only("Bridge Contract Tests", function () {
         })
 
         it("Should release tokens successfully", async function () {
-            const nonce = await generateNonce(sender.address);
+            const nonce = await generateNonce(recipient.address);
             const lockTxHash = '0x257ce98a6084ad193d86308d3ee32c18ab200a9c4871d345e55a525a160437aa';
             const sourceChainTxHash = await generateReleaseHash(targetToken, sender.address, recipient.address, formattedAmount, nonce, lockTxHash, sourceChainId, targetChainId);
             const tx = await targetChainBridge.executeTokenOperation(

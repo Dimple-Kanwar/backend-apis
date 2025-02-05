@@ -14,7 +14,7 @@ const app = express();
 const httpServer = createServer(app);
 
 const corsOptions = {
-  origin: ["http://localhost:5173", "http://localhost:5174"],
+  origin: ["*"],
   methods: ["GET", "POST", "OPTIONS"],
   credentials: true,
 };
@@ -44,10 +44,10 @@ async function startServer() {
       expressMiddleware(server, {
         context: async ({ req }) => {
           const query = req.body.query || "";
-          const operationName = req.body.operationName;
 
           // Allow API key generation without authentication
           if (query.includes("mutation") && query.includes("generateApiKey")) {
+            console.log("1");
             return {
               bridgeService: new BridgeService(),
               isAuthenticated: true,
@@ -60,6 +60,7 @@ async function startServer() {
             query.includes("__schema") ||
             query.includes("__type")
           ) {
+            console.log("2");
             return {
               bridgeService: new BridgeService(),
               isAuthenticated: true,
@@ -73,7 +74,7 @@ async function startServer() {
               "Unauthorized: Invalid API key or rate limit exceeded"
             );
           }
-
+          console.log("3");
           return {
             bridgeService: new BridgeService(),
             isAuthenticated: true,

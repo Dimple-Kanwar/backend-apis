@@ -44,7 +44,6 @@ export class ChainService {
   public getBridgeContract(chainId: number) {
     // Return type changed to BaseContract
     const contract = this.bridgeContracts.get(chainId);
-    console.log({contract});
     if (!contract)
       throw new Error(`Bridge contract not found for chain ${chainId}`);
     return contract;

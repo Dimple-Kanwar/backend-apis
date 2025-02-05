@@ -2,6 +2,7 @@ import { Transaction } from '../database/models/transaction';
 import { pubsub } from './pubsub.service';
 
 export class TransactionService {
+    
     async createTransaction(data: any) {
         const transaction = new Transaction(data);
         await transaction.save();
@@ -32,6 +33,18 @@ export class TransactionService {
     async getTransactions(address: string, status?: string) {
         const query: any = {
             $or: [{ sender: address }, { recipient: address }]
+        };
+
+        if (status) {
+            query.status = status;
+        }
+
+        return Transaction.find(query).sort({ createdAt: -1 });
+    }
+
+    async getTransactionByHash(hash: String, status?: string) {
+        const query: any = {
+            $or: [{ targetChainTxHash: hash }, { sourceChainTxHash: hash }]
         };
 
         if (status) {

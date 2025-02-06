@@ -9,7 +9,7 @@ import { generateLockHash, generateNonce, generateReleaseHash } from "../utils/c
 import { send } from "process";
 import { GasService } from "../services/gas.service";
 
-describe.only("Bridge Contract Tests", function () {
+describe("Bridge Contract Tests", function () {
     let sourceChainBridge: Bridge;
     let targetChainBridge: Bridge;
     const sourceBridgeAddress = process.env.BASE_BRIDGE_ADDRESS!;

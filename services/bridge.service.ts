@@ -119,16 +119,18 @@ export class BridgeService {
   ) {
     try {
       // Find transaction record
-      let transaction = await this.transactionService.getTransactionByHash(sourceTxHash);
-      transaction
+      let transactions = await this.transactionService.getTransactionByHash(sourceTxHash);
+      console.log({transactions});
+      const transaction = transactions[0];
       // Get target chain token mapping
-      // const targetToken = await this.tokenService.getTargetTokenAddress(
-      //   sourceToken,
-      //   transaction.sourceChainId,
-      //   targetChainId
-      // );
+      const targetToken = await this.tokenService.getTargetTokenAddress(
+        sourceToken,
+        transaction.sourceChainId!,
+        transaction.targetChainId!
+      );
 
-      // const sourceChainTxHash = await generateReleaseHash(targetToken, sender, recipient, amount, nonce, sourceTxHash, sourceChainId, targetChainId);
+      const nonce = await generateNonce(transaction.recipient!);
+      const sourceChainTxHash = await generateReleaseHash(targetToken, sender, transaction.recipient!, amount, nonce, sourceTxHash, transaction.sourceChainId!, transaction.targetChainId!);
 
       // if (!transaction) {
       //   transaction = await this.transactionService.createTransaction({
@@ -149,53 +151,53 @@ export class BridgeService {
       // }
 
       // // Update status to releasing
-      // await this.transactionService.updateTransaction(transaction.id, {
-      //   status: TransactionStatus.RELEASING
-      // });
+      await this.transactionService.updateTransaction(transaction.id, {
+        status: TransactionStatus.RELEASING
+      });
 
 
-      // // Release tokens on target chain
-      // const signer = this.chainService.getSigner(targetChainId);
-      // const targetContract = this.chainService.getBridgeContract(targetChainId);
-      // const targetChainBridge = targetContract.connect(signer) as Contract;
+      // Release tokens on target chain
+      const signer = this.chainService.getSigner(transaction.targetChainId!);
+      const targetContract = this.chainService.getBridgeContract(transaction.targetChainId!);
+      const targetChainBridge = targetContract.connect(signer) as Contract;
 
-      // const releaseTx = await targetChainBridge.executeTokenOperation(
-      //   targetToken,
-      //   amount,
-      //   recipient,
-      //   sourceChainTxHash,
-      //   false
-      // );
-      // const receipt = await releaseTx.wait();
-      // // Update transaction status
-      // await this.transactionService.updateTransaction(transaction.id, {
-      //   targetTxHash: releaseTx.hash,
-      //   status: TransactionStatus.COMPLETED
-      // });
+      const releaseTx = await targetChainBridge.executeTokenOperation(
+        targetToken,
+        amount,
+        transaction.recipient,
+        sourceChainTxHash,
+        false
+      );
+      const receipt = await releaseTx.wait();
+      // Update transaction status
+      await this.transactionService.updateTransaction(transaction.id, {
+        targetTxHash: releaseTx.hash,
+        status: TransactionStatus.COMPLETED
+      });
 
-      // // Emit event
-      // pubsub.publish(`TRANSACTION_COMPLETED_${recipient.toLowerCase()}`, {
-      //   transactionCompleted: {
-      //     ...transaction,
-      //     targetTxHash: releaseTx.hash,
-      //     status: TransactionStatus.COMPLETED
-      //   }
-      // });
-      // console.log(`Tokens released on chain ${targetChainId}. Tx: ${tx.hash}`);
+      // Emit event
+      pubsub.publish(`TRANSACTION_COMPLETED_${transaction.recipient!.toLowerCase()}`, {
+        transactionCompleted: {
+          ...transaction,
+          targetTxHash: releaseTx.hash,
+          status: TransactionStatus.COMPLETED
+        }
+      });
+      console.log(`Tokens released on chain ${transaction.targetChainId}. Tx: ${releaseTx.hash}`);
 
-      // return {
-      //   hash: releaseTx.hash,
-      //   ...transaction
-      // }
+      return {
+        hash: releaseTx.hash,
+        ...transaction
+      }
     } catch (error: any) {
       console.error('Release tokens error:', error);
       let transaction = await this.transactionService.getTransactionByHash(sourceTxHash);
-      // if (transaction) {
-      //   await this.transactionService.updateTransaction(transaction.id, {
-      //     status: TransactionStatus.FAILED,
-      //     errorMessage: error.message
-      //   });
-      // }
+      if (transaction) {
+        await this.transactionService.updateTransaction(transaction[0].id, {
+          status: TransactionStatus.FAILED,
+          errorMessage: error.message
+        });
+      }
       throw error;
     }
   }

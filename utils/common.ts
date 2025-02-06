@@ -27,7 +27,7 @@ export const generateReleaseHash = async(
     token: string,
     sender: string,
     recipient: string,
-    amount: bigint,
+    amount: ethers.BigNumberish,
     nonce: number,
     lockTxHash: string,  // Hash of the original lock transaction
     sourceChainId: number,

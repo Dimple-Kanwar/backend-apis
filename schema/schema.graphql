@@ -89,25 +89,18 @@ type Mutation {
   updateRateLimit(key: String!, newLimit: Int!): Boolean!
   resetApiKey(key: String!): String
   bridgeToken(
-    token: String!
-    sourceChainId: Int!
-    targetChainId: Int!
-    amount: String!
-    sender: String!
-    recipient: String!
+    sourceToken: String! # Token address
+    targetToken: String! # Token address
+    sourceChainId: Int! # Source chain ID
+    targetChainId: Int! # Target chain ID
+    amount: String! # Amount in wei
+    sender: String! # Sender address
+    recipient: String! # Recipient address
   ): BridgeTokenResponse!
 }
 
 type Subscription {
   bridgeTransactionUpdated(address: String!): BridgeTransaction!
-}
-input BridgeTokenInput {
-  token: String! # Token address
-  sourceChainId: Int! # Source chain ID
-  targetChainId: Int! # Target chain ID
-  amount: String! # Amount in wei
-  sender: String! # Sender address
-  recipient: String! # Recipient address
 }
 
 type BridgeResponse {

@@ -19,14 +19,22 @@ const corsOptions = {
   credentials: true,
 };
 
+const createBridgeService = () =>
+  new BridgeService(
+    // process.env.BASE_WS_URL || "wss://base-sepolia-rpc.publicnode.com",
+    "https://sepolia.base.org",
+    process.env.BASE_BRIDGE_ADDRESS || "",
+    // process.env.ARBITRUM_WS_URL || "wss://arbitrum-sepolia-rpc.publicnode.com",
+    "https://sepolia-rollup.arbitrum.io/rpc",
+    process.env.ARBITRUM_BRIDGE_ADDRESS || ""
+  );
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
 async function startServer() {
   try {
-    // Load GraphQL schema
     const schema = loadSchema();
-    // Set up Apollo Server
     const server = new ApolloServer({
       schema,
       formatError: (error) => {
@@ -45,38 +53,33 @@ async function startServer() {
         context: async ({ req }) => {
           const query = req.body.query || "";
 
-          // Allow API key generation without authentication
           if (query.includes("mutation") && query.includes("generateApiKey")) {
-            console.log("1");
             return {
-              bridgeService: new BridgeService(),
+              bridgeService: createBridgeService(),
               isAuthenticated: true,
             };
           }
 
-          // Allow introspection queries
           if (
             query.includes("IntrospectionQuery") ||
             query.includes("__schema") ||
             query.includes("__type")
           ) {
-            console.log("2");
             return {
-              bridgeService: new BridgeService(),
+              bridgeService: createBridgeService(),
               isAuthenticated: true,
             };
           }
 
-          // Validate API key for all other operations
           const apiKey = req.headers["x-api-key"] as string;
           if (!apiKey || !(await ApiKeyService.validateApiKey(apiKey))) {
             throw new Error(
               "Unauthorized: Invalid API key or rate limit exceeded"
             );
           }
-          console.log("3");
+
           return {
-            bridgeService: new BridgeService(),
+            bridgeService: createBridgeService(),
             isAuthenticated: true,
             apiKey,
           };

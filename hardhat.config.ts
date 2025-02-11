@@ -9,6 +9,10 @@ const config: HardhatUserConfig = {
       url: process.env.BASE_TESTNET_RPC,
       accounts: [process.env.ADMIN_ACCOUNT_PK!]
     },
+    "eth_sepolia": {
+      url: process.env.SEPOLIA_TESTNET_RPC,
+      accounts: [process.env.ADMIN_ACCOUNT_PK!]
+    },
     "arbitrum_sepolia": {
       url: process.env.ARBITRUM_TESTNET_RPC,
       accounts: [process.env.ADMIN_ACCOUNT_PK!]

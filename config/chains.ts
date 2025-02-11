@@ -1,58 +1,52 @@
 import { ChainConfig } from "../types";
 
 export const CHAIN_CONFIGS: { [chainId: number]: ChainConfig } = {
-    421614: { // Arbitrum Sepolia
-        rpcUrl: process.env.ARBITRUM_TESTNET_RPC || '',
+  421614: {
+    // Arbitrum Sepolia
+    rpcUrl: "https://sepolia-rollup.arbitrum.io/rpc",
+    chainId: 421614,
+    name: "Arbitrum Sepolia",
+    bridgeAddress: "0x16D769F63Fe44f4f5590159cECADafaA9A9B8Fde",
+    supportedTokens: {
+      B10: {
+        address: "0xd43e27C9A7573707484F905bbCE6595ac4cfc319",
         chainId: 421614,
-        name: "Arbitrum Sepolia",
-        bridgeAddress: process.env.ARBITRUM_BRIDGE_ADDRESS || '',
-        supportedTokens: {
-            'B10': {
-                address: process.env.B10_TOKEN_ARBITRUM || '',
-                chainId: 421614,
-                decimals: 18,
-                symbol: "B10"
-            }
-            // Add more tokens
-        }
+        decimals: 18,
+        symbol: "B10",
+      },
     },
-    84532: { // Base Sepolia
-        rpcUrl: process.env.BASE_TESTNET_RPC || '',
+    wsRpcUrl: "wss://arbitrum-sepolia-rpc.publicnode.com",
+  },
+  84532: {
+    // Base Sepolia
+    rpcUrl: process.env.BASE_TESTNET_RPC || "",
+    chainId: 84532,
+    name: "Base Sepolia",
+    bridgeAddress: process.env.BASE_BRIDGE_ADDRESS || "",
+    supportedTokens: {
+      B10: {
+        address: process.env.B10_TOKEN_BASE || "",
         chainId: 84532,
-        name: "Base Sepolia",
-        bridgeAddress: process.env.BASE_BRIDGE_ADDRESS || '',
-        // bridgeValidatorAddress: process.env.BASE_BRIDGE_VALIDATOR_ADDRESS || '',
-        supportedTokens: {
-            'B10': {
-                address: process.env.B10_TOKEN_BASE || '',
-                chainId: 84532,
-                decimals: 18,
-                symbol: "B10"
-            }
-            // Add more tokens
-        }
+        decimals: 18,
+        symbol: "B10",
+      },
     },
-    // 31: {
-    //     rpcUrl: process.env.ROOTSTOCK_TESTNET_RPC || '',
-    //     chainId: 31,
-    //     name: "Rootstock Testnet",
-    //     bridgeAddress: '0x16D769F63Fe44f4f5590159cECADafaA9A9B8Fde',
-    //     // bridgeValidatorAddress: '0xee3DB392af91d48E38f3ee9B6b30CfF4232c2a29'
-    //     supportedTokens: {
-    //         'B10': {
-    //             address: process.env.B10_TOKEN_ROOTSTOCK_TESTNET || '',
-    //             chainId: 31,
-    //             decimals: 18,
-    //             symbol: "B10"
-    //         }
-    //         // Add more tokens
-    //     }
-    // },
-    // 80002: {
-    //     rpcUrl: process.env.ROOTSTOCK_TESTNET_RPC || '',
-    //     chainId: 80002,
-    //     name: "Rootstock Testnet",
-    //     bridgeAddress: '',
-    //     bridgeValidatorAddress: ''
-    // }
+    wsRpcUrl: "wss://base-sepolia-rpc.publicnode.com",
+  },
+  11155111: {
+    // ETH Sepolia
+    rpcUrl: "https://api.zan.top/eth-sepolia",
+    chainId: 11155111,
+    name: "ETH Sepolia",
+    bridgeAddress: "0xE59875F611690d91511876c983Ae2D077574F0AA",
+    supportedTokens: {
+      B10: {
+        address: "0xa991Ba363cfe3d47278ff6115d0D13cE87A2DAac",
+        chainId: 11155111,
+        decimals: 18,
+        symbol: "B10",
+      },
+    },
+    wsRpcUrl: "wss://ethereum-sepolia-rpc.publicnode.com",
+  },
 };

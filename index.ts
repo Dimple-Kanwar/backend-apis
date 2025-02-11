@@ -19,15 +19,7 @@ const corsOptions = {
   credentials: true,
 };
 
-const createBridgeService = () =>
-  new BridgeService(
-    // process.env.BASE_WS_URL || "wss://base-sepolia-rpc.publicnode.com",
-    "https://sepolia.base.org",
-    process.env.BASE_BRIDGE_ADDRESS || "",
-    // process.env.ARBITRUM_WS_URL || "wss://arbitrum-sepolia-rpc.publicnode.com",
-    "https://sepolia-rollup.arbitrum.io/rpc",
-    process.env.ARBITRUM_BRIDGE_ADDRESS || ""
-  );
+const createBridgeService = () => new BridgeService(84532, 421614);
 
 app.use(cors(corsOptions));
 app.use(express.json());

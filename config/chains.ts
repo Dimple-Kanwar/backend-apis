@@ -35,7 +35,7 @@ export const CHAIN_CONFIGS: { [chainId: number]: ChainConfig } = {
   },
   11155111: {
     // ETH Sepolia
-    rpcUrl: "https://api.zan.top/eth-sepolia",
+    rpcUrl: "https://eth-sepolia.public.blastapi.io",
     chainId: 11155111,
     name: "ETH Sepolia",
     bridgeAddress: "0xE59875F611690d91511876c983Ae2D077574F0AA",

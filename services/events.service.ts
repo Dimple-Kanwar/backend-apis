@@ -1,11 +1,4 @@
-import {
-  ethers,
-  Contract,
-  WebSocketProvider,
-  Listener,
-  EventLog,
-  LogDescription,
-} from "ethers";
+import { ethers, Contract, WebSocketProvider, Listener } from "ethers";
 import { abi as bridgeAbi } from "../artifacts/contracts/Bridge.sol/Bridge.json";
 
 export class BridgeEventService {
@@ -37,85 +30,22 @@ export class BridgeEventService {
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        // this.removeListener(eventName, eventListener);
+        this.contract.off(eventName, eventListener);
         reject(new Error(`Timeout waiting for ${eventName} event`));
       }, this.TIMEOUT);
 
-      // Set up a filter for all logs from the contract
-      const filter = {
-        address: this.contract.target,
+      const eventListener = (...args: any[]) => {
+        console.log(`${eventName} event detected:`, args);
+        clearTimeout(timer);
+        this.contract.off(eventName, eventListener);
+        resolve(args);
       };
 
-      console.log("Setting up filter:", filter);
-
-      // Listen for raw logs and decode them
-      const eventListener = async (log: any) => {
-        try {
-          console.log("Raw log received:", {
-            address: log.address,
-            topics: log.topics,
-            data: log.data,
-            blockNumber: log.blockNumber,
-            transactionHash: log.transactionHash,
-          });
-
-          // Try to parse the log
-          let parsedLog: LogDescription;
-          try {
-            parsedLog = this.contract.interface.parseLog({
-              topics: [...log.topics],
-              data: log.data,
-            })!;
-            console.log("Parsed log:", parsedLog);
-          } catch (parseError) {
-            console.log("Could not parse log:", parseError);
-            return;
-          }
-
-          // Check if this is the event we're looking for
-          if (parsedLog.name === eventName) {
-            console.log(`${eventName} event detected:`, {
-              args: parsedLog.args,
-              eventName: parsedLog.name,
-              signature: parsedLog.signature,
-            });
-
-            clearTimeout(timer);
-            this.provider.off("block", blockListener);
-            resolve(parsedLog);
-          }
-        } catch (error) {
-          console.error("Error processing log:", error);
-        }
-      };
-
-      // Listen for new blocks and check logs
-      const blockListener = async (blockNumber: number) => {
-        try {
-          const block = await this.provider.getBlock(blockNumber, true);
-          if (!block) return;
-
-          // Process each transaction in the block
-          const logs = await this.provider.getLogs({
-            ...filter,
-            fromBlock: blockNumber,
-            toBlock: blockNumber,
-          });
-
-          for (const log of logs) {
-            await eventListener(log);
-          }
-        } catch (error) {
-          console.error("Error processing block:", error);
-        }
-      };
-
-      // Start listening for new blocks
-      this.provider.on("block", blockListener);
-
-      console.log(`Listeners set up for ${eventName}`);
+      this.contract.on(eventName, eventListener);
+      console.log(`Listener set up for ${eventName}`);
     });
   }
+
   private async reconnect() {
     if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
       throw new Error("Max reconnection attempts reached");

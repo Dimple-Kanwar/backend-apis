@@ -19,7 +19,7 @@ const corsOptions = {
   credentials: true,
 };
 
-const createBridgeService = () => new BridgeService(11155111, 84532);
+const createBridgeService = () => new BridgeService();
 
 app.use(cors(corsOptions));
 app.use(express.json());

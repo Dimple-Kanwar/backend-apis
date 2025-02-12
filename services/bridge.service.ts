@@ -23,7 +23,7 @@ export class BridgeService {
   private sourceEventService: BridgeEventService;
   private targetEventService: BridgeEventService;
 
-  constructor(sourceChainID: number, targetChainID: number) {
+  constructor() {
     if (
       !process.env.ADMIN_ACCOUNT_PK ||
       !process.env.USER1_PK ||
@@ -31,41 +31,41 @@ export class BridgeService {
     ) {
       throw new Error("Required private keys not set");
     }
-    if (!CHAIN_CONFIGS[sourceChainID]) {
+    if (!CHAIN_CONFIGS[84532]) {
       throw new Error("Source Chain ID not supported");
     }
-    if (!CHAIN_CONFIGS[targetChainID]) {
+    if (!CHAIN_CONFIGS[11155111]) {
       throw new Error("Target Chain ID not supported");
     }
 
     this.sourceProvider = new ethers.JsonRpcProvider(
-      CHAIN_CONFIGS[sourceChainID].rpcUrl
+      CHAIN_CONFIGS[84532].rpcUrl
     );
     this.targetProvider = new ethers.JsonRpcProvider(
-      CHAIN_CONFIGS[targetChainID].rpcUrl
+      CHAIN_CONFIGS[11155111].rpcUrl
     );
     this.owner = new Wallet(process.env.ADMIN_ACCOUNT_PK, this.sourceProvider);
     this.sender = new Wallet(process.env.USER1_PK, this.sourceProvider);
     this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
 
     this.sourceChainBridge = new Contract(
-      CHAIN_CONFIGS[sourceChainID].bridgeAddress,
+      CHAIN_CONFIGS[84532].bridgeAddress,
       bridgeAbi,
       this.owner
     );
     this.targetChainBridge = new Contract(
-      CHAIN_CONFIGS[targetChainID].bridgeAddress,
+      CHAIN_CONFIGS[11155111].bridgeAddress,
       bridgeAbi,
       this.owner.connect(this.targetProvider)
     );
 
     this.sourceEventService = new BridgeEventService(
-      CHAIN_CONFIGS[sourceChainID].wsRpcUrl,
-      CHAIN_CONFIGS[sourceChainID].bridgeAddress
+      CHAIN_CONFIGS[84532].wsRpcUrl,
+      CHAIN_CONFIGS[84532].bridgeAddress
     );
     this.targetEventService = new BridgeEventService(
-      CHAIN_CONFIGS[targetChainID].wsRpcUrl,
-      CHAIN_CONFIGS[targetChainID].bridgeAddress
+      CHAIN_CONFIGS[11155111].wsRpcUrl,
+      CHAIN_CONFIGS[11155111].bridgeAddress
     );
   }
   private async verifyReleaseState(
@@ -126,6 +126,53 @@ export class BridgeService {
         sender,
         recipient,
       } = request;
+
+      if (
+        !process.env.ADMIN_ACCOUNT_PK ||
+        !process.env.USER1_PK ||
+        !process.env.USER2_PK
+      ) {
+        throw new Error("Required private keys not set");
+      }
+      if (!CHAIN_CONFIGS[sourceChainId]) {
+        throw new Error("Source Chain ID not supported");
+      }
+      if (!CHAIN_CONFIGS[targetChainId]) {
+        throw new Error("Target Chain ID not supported");
+      }
+
+      this.sourceProvider = new ethers.JsonRpcProvider(
+        CHAIN_CONFIGS[sourceChainId].rpcUrl
+      );
+      this.targetProvider = new ethers.JsonRpcProvider(
+        CHAIN_CONFIGS[targetChainId].rpcUrl
+      );
+      this.owner = new Wallet(
+        process.env.ADMIN_ACCOUNT_PK,
+        this.sourceProvider
+      );
+      this.sender = new Wallet(process.env.USER1_PK, this.sourceProvider);
+      this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
+
+      this.sourceChainBridge = new Contract(
+        CHAIN_CONFIGS[sourceChainId].bridgeAddress,
+        bridgeAbi,
+        this.owner
+      );
+      this.targetChainBridge = new Contract(
+        CHAIN_CONFIGS[targetChainId].bridgeAddress,
+        bridgeAbi,
+        this.owner.connect(this.targetProvider)
+      );
+
+      this.sourceEventService = new BridgeEventService(
+        CHAIN_CONFIGS[sourceChainId].wsRpcUrl,
+        CHAIN_CONFIGS[sourceChainId].bridgeAddress
+      );
+      this.targetEventService = new BridgeEventService(
+        CHAIN_CONFIGS[targetChainId].wsRpcUrl,
+        CHAIN_CONFIGS[targetChainId].bridgeAddress
+      );
       console.log("Starting bridge operation:", request);
 
       // Initialize token contracts

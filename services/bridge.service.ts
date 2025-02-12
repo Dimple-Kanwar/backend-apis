@@ -152,8 +152,15 @@ export class BridgeService {
       if (!isSourceValidator || !isTargetValidator) {
         throw new Error("Owner is not a validator");
       }
-
+      if (
+        new Wallet(process.env.USER1_PK!, this.sourceProvider).address != sender
+      ) {
+        throw new Error("Private Key and Public Key mismatch");
+      }
       // Check and handle token approval
+      console.log("Checking token allowance...");
+      console.log("Sender:", sender);
+
       const allowance = await (
         this.sourceTokenContract.connect(this.sender) as Contract
       ).allowance(sender, this.sourceChainBridge.target);

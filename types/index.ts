@@ -64,7 +64,6 @@ export interface BridgeTokenInput {
 
 export interface BridgeResponse {
   success: boolean;
-  transactionHash?: string;
   sourceTxHash?: string;
   targetTxHash?: string;
   status: string;

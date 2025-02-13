@@ -226,12 +226,12 @@ export class BridgeService {
       }
 
       // Verify bridge liquidity
-      // const targetBridgeBalance = await this.targetTokenContract.balanceOf(
-      //   this.targetChainBridge.target
-      // );
-      // if (targetBridgeBalance < formattedAmount) {
-      //   throw new Error("Insufficient bridge liquidity");
-      // }
+      const targetBridgeBalance = await this.targetTokenContract.balanceOf(
+        this.targetChainBridge.target
+      );
+      if (targetBridgeBalance < formattedAmount) {
+        throw new Error("Insufficient bridge liquidity");
+      }
 
       // Lock tokens
       const nonce = await generateNonce(sender);

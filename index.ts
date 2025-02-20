@@ -14,9 +14,10 @@ const app = express();
 const httpServer = createServer(app);
 
 const corsOptions = {
-  origin: ["*"],
+  origin: "*",
   methods: ["GET", "POST", "OPTIONS"],
   credentials: true,
+  allowedHeaders: ["content-type", "x-api-key", "apollo-require-preflight"],
 };
 
 const createBridgeService = () => new BridgeService();

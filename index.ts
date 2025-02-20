@@ -29,6 +29,7 @@ async function startServer() {
     const schema = loadSchema();
     const server = new ApolloServer({
       schema,
+      introspection: true,
       formatError: (error) => {
         console.error("GraphQL Error:", error);
         return error;

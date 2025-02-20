@@ -14,6 +14,7 @@ export const bridgeResolvers = {
         amount,
         sender,
         recipient,
+        signature,
       }: BridgeTokenInput,
       context: Context
     ): Promise<BridgeResponse> => {
@@ -26,6 +27,7 @@ export const bridgeResolvers = {
           amount,
           sender,
           recipient,
+          signature,
         });
       } catch (error: unknown) {
         const errorMessage =

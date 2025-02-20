@@ -115,6 +115,7 @@ export class BridgeService {
     amount: string;
     sender: string;
     recipient: string;
+    signature: string;
   }): Promise<any> {
     try {
       const {
@@ -125,6 +126,7 @@ export class BridgeService {
         amount,
         sender,
         recipient,
+        signature,
       } = request;
 
       if (
@@ -208,15 +210,45 @@ export class BridgeService {
       console.log("Checking token allowance...");
       console.log("Sender:", sender);
 
-      const allowance = await (
-        this.sourceTokenContract.connect(this.sender) as Contract
-      ).allowance(sender, this.sourceChainBridge.target);
-      if (allowance < formattedAmount) {
-        console.log("Approving tokens...");
-        const approveTx = await (
+      try {
+        const allowance = await (
           this.sourceTokenContract.connect(this.sender) as Contract
-        ).approve(this.sourceChainBridge.target, formattedAmount);
-        await approveTx.wait();
+        ).allowance(sender, this.sourceChainBridge.target);
+        
+        if (allowance < formattedAmount) {
+          console.log("Approving tokens with signature...");
+          try {
+            const approveTx = await (
+              this.sourceTokenContract.connect(this.sender) as Contract
+            ).permit(
+              sender,
+              this.sourceChainBridge.target,
+              formattedAmount,
+              ethers.MaxUint256, // Deadline set to maximum
+              signature
+            );
+            
+            const receipt = await approveTx.wait();
+            if (!receipt.status) {
+              throw new Error("Token approval transaction failed");
+            }
+            console.log("Token approval successful");
+          } catch (approvalError: any) {
+            const errorMessage = approvalError?.message || "Unknown error during token approval";
+            if (errorMessage.includes("invalid signature")) {
+              throw new Error("Invalid signature provided for token approval");
+            } else if (errorMessage.includes("expired")) {
+              throw new Error("Token approval signature has expired");
+            } else if (errorMessage.toLowerCase().includes("user rejected")) {
+              throw new Error("User rejected the token approval transaction");
+            } else {
+              throw new Error(`Token approval failed: ${errorMessage}`);
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error("Error during token approval process:", error);
+        throw error;
       }
 
       // Verify sender balance

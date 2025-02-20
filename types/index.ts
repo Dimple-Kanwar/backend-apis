@@ -60,6 +60,7 @@ export interface BridgeTokenInput {
   amount: string;
   sender: string;
   recipient: string;
+  signature: string;
 }
 
 export interface BridgeResponse {

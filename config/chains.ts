@@ -19,13 +19,13 @@ export const CHAIN_CONFIGS: { [chainId: number]: ChainConfig } = {
   },
   84532: {
     // Base Sepolia
-    rpcUrl: process.env.BASE_TESTNET_RPC || "",
+    rpcUrl: process.env.BASE_SEPOLIA_RPC || "",
     chainId: 84532,
     name: "Base Sepolia",
     bridgeAddress: process.env.BASE_BRIDGE_ADDRESS || "",
     supportedTokens: {
       B10: {
-        address: process.env.B10_TOKEN_BASE || "",
+        address: process.env.B10_TOKEN_BASE_SEPOLIA || "",
         chainId: 84532,
         decimals: 18,
         symbol: "B10",
@@ -41,7 +41,7 @@ export const CHAIN_CONFIGS: { [chainId: number]: ChainConfig } = {
     bridgeAddress: "0xE59875F611690d91511876c983Ae2D077574F0AA",
     supportedTokens: {
       B10: {
-        address: "0xa991Ba363cfe3d47278ff6115d0D13cE87A2DAac",
+        address: process.env.B10_TOKEN_SEPOLIA || "",
         chainId: 11155111,
         decimals: 18,
         symbol: "B10",

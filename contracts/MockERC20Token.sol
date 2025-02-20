@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract MockERC20Token is ERC20, Ownable {
+contract MockERC20Token is ERC20Permit, Ownable {
     uint8 private immutable _decimals;
 
     constructor(
         string memory name_,
         string memory symbol_,
         uint8 decimals_
-    ) ERC20(name_, symbol_) Ownable(msg.sender){
+    ) ERC20(name_, symbol_) ERC20Permit(name_) Ownable(msg.sender) {
         _decimals = decimals_;
     }
 

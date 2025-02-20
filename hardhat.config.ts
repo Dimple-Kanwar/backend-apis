@@ -6,7 +6,7 @@ const config: HardhatUserConfig = {
   solidity: "0.8.28",
   networks: {
     "base_sepolia": {
-      url: process.env.BASE_TESTNET_RPC,
+      url: process.env.BASE_SEPOLIA_RPC,
       accounts: [process.env.ADMIN_ACCOUNT_PK!]
     },
     "eth_sepolia": {

@@ -1,14 +1,13 @@
 import { ethers, Contract, JsonRpcProvider, Wallet } from "ethers";
-import { abi as tokenAbi } from "../artifacts/contracts/MockERC20Token.sol/MockERC20Token.json";
-import { abi as bridgeAbi } from "../artifacts/contracts/Bridge.sol/Bridge.json";
+
 import {
   generateLockHash,
   generateNonce,
   generateReleaseHash,
 } from "../utils/common";
-// import { Bridge, MockERC20 } from "../typechain-types";
 import { BridgeEventService } from "./events.service";
 import { CHAIN_CONFIGS } from "../config/chains";
+import { bridgeAbi, tokenAbi } from "../utils/abi";
 
 export class BridgeService {
   private sourceProvider: JsonRpcProvider;
@@ -19,15 +18,15 @@ export class BridgeService {
   private targetTokenContract!: Contract;
   private owner: Wallet;
   private sender: Wallet;
-  private recipient: Wallet;
+  // private recipient: Wallet;
   private sourceEventService: BridgeEventService;
   private targetEventService: BridgeEventService;
 
   constructor() {
     if (
       !process.env.ADMIN_ACCOUNT_PK ||
-      !process.env.USER1_PK ||
-      !process.env.USER2_PK
+      !process.env.USER1_PK
+      // !process.env.USER2_PK
     ) {
       throw new Error("Required private keys not set");
     }
@@ -46,7 +45,7 @@ export class BridgeService {
     );
     this.owner = new Wallet(process.env.ADMIN_ACCOUNT_PK, this.sourceProvider);
     this.sender = new Wallet(process.env.USER1_PK, this.sourceProvider);
-    this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
+    // this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
 
     this.sourceChainBridge = new Contract(
       CHAIN_CONFIGS[84532].bridgeAddress,
@@ -129,8 +128,8 @@ export class BridgeService {
 
       if (
         !process.env.ADMIN_ACCOUNT_PK ||
-        !process.env.USER1_PK ||
-        !process.env.USER2_PK
+        !process.env.USER1_PK
+        // !process.env.USER2_PK
       ) {
         throw new Error("Required private keys not set");
       }
@@ -152,7 +151,7 @@ export class BridgeService {
         this.sourceProvider
       );
       this.sender = new Wallet(process.env.USER1_PK, this.sourceProvider);
-      this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
+      // this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
 
       this.sourceChainBridge = new Contract(
         CHAIN_CONFIGS[sourceChainId].bridgeAddress,

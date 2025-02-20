@@ -1,5 +1,5 @@
 import { ethers, Contract, WebSocketProvider, Listener } from "ethers";
-import { abi as bridgeAbi } from "../artifacts/contracts/Bridge.sol/Bridge.json";
+import { bridgeAbi } from "../utils/abi";
 
 export class BridgeEventService {
   private provider: WebSocketProvider;

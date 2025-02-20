@@ -1,14 +1,13 @@
 import { ethers, Signer, Contract, BaseContract, Wallet } from "ethers";
 import { ChainConfig } from "../types";
-import { abi as BridgeABI } from "../artifacts/contracts/Bridge.sol/Bridge.json";
-import { CHAIN_CONFIGS } from '../config/chains';
+import { CHAIN_CONFIGS } from "../config/chains";
 import { GasService } from "./gas.service";
 import { Bridge__factory } from "../typechain-types";
 import { Chain } from "../interfaces/responses";
 import { network } from "hardhat";
+import { bridgeAbi } from "../utils/abi";
 
 export class ChainService {
-
   private providers: Map<number, ethers.Provider> = new Map();
   private bridgeContracts: Map<number, BaseContract> = new Map();
   private signers: Map<number, Signer> = new Map();
@@ -26,7 +25,7 @@ export class ChainService {
       // console.log({admin});
       const bridgeContract = new ethers.Contract(
         config.bridgeAddress,
-        BridgeABI,
+        bridgeAbi,
         admin
       );
       // console.log({bridgeContract});
@@ -54,14 +53,11 @@ export class ChainService {
 
     let bridgeContract = this.bridgeContracts.get(chainId);
     if (!bridgeContract) {
-      throw new Error(`BridgeContract not found for the chainId: ${chainId}`)
+      throw new Error(`BridgeContract not found for the chainId: ${chainId}`);
     }
     bridgeContract = bridgeContract.connect(signer);
     if (bridgeContract) {
-      this.bridgeContracts.set(
-        chainId,
-        bridgeContract
-      );
+      this.bridgeContracts.set(chainId, bridgeContract);
     }
   }
 
@@ -75,7 +71,7 @@ export class ChainService {
   async getSupportedChains(): Promise<Chain[]> {
     return Object.entries(CHAIN_CONFIGS).map(([chainId, config]) => ({
       id: parseInt(chainId),
-      name: config.name
+      name: config.name,
     }));
   }
 

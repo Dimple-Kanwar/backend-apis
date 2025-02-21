@@ -34,16 +34,13 @@ async function generateBridgeSignature({
   recipient,
   privateKey,
 }: SignatureParams): Promise<{ signature: string; bridgeData: BridgeData }> {
-  // Create provider and signer
   const provider = new ethers.JsonRpcProvider(
     CHAIN_CONFIGS[sourceChainId].rpcUrl
   );
   const signer = new ethers.Wallet(privateKey, provider);
 
-  // Calculate permit deadline (48 hours from now)
   const deadline = Math.floor(Date.now() / 1000) + 48 * 60 * 60;
 
-  // Create the bridge data
   const bridgeData = {
     sourceChainId,
     targetChainId,
@@ -173,7 +170,6 @@ async function main() {
       amount: params.amount,
       sender: params.sender,
       recipient: params.recipient,
-      // Don't log the private key
     });
 
     const { signature, bridgeData } = await generateBridgeSignature(params);

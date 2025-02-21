@@ -13,6 +13,17 @@ interface SignatureParams {
   privateKey: string;
 }
 
+interface BridgeData {
+  sourceChainId: number;
+  targetChainId: number;
+  sourceToken: string;
+  targetToken: string;
+  amount: string;
+  sender: string;
+  recipient: string;
+  deadline: number;
+}
+
 async function generateBridgeSignature({
   sourceChainId,
   targetChainId,
@@ -22,7 +33,7 @@ async function generateBridgeSignature({
   sender,
   recipient,
   privateKey,
-}: SignatureParams): Promise<string> {
+}: SignatureParams): Promise<{ signature: string; bridgeData: BridgeData }> {
   // Create provider and signer
   const provider = new ethers.JsonRpcProvider(
     CHAIN_CONFIGS[sourceChainId].rpcUrl
@@ -68,7 +79,56 @@ async function generateBridgeSignature({
   // Sign the typed data
   const signature = await signer.signTypedData(domain, types, bridgeData);
 
-  return signature;
+  return { signature, bridgeData };
+}
+
+async function verifySignature(signature: string, bridgeData: BridgeData) {
+  // Create domain and types matching those used in signature generation
+  const domain = {
+    name: "Bridge",
+    version: "1",
+    chainId: bridgeData.sourceChainId,
+    verifyingContract: CHAIN_CONFIGS[bridgeData.sourceChainId].bridgeAddress,
+  };
+
+  const types = {
+    BridgeRequest: [
+      { name: "sourceChainId", type: "uint256" },
+      { name: "targetChainId", type: "uint256" },
+      { name: "sourceToken", type: "address" },
+      { name: "targetToken", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "sender", type: "address" },
+      { name: "recipient", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+  };
+
+  try {
+    // Recover the address that signed the data
+    const recoveredAddress = ethers.verifyTypedData(
+      domain,
+      types,
+      bridgeData,
+      signature
+    );
+
+    // Check if the recovered address matches the sender
+    const isValid =
+      recoveredAddress.toLowerCase() === bridgeData.sender.toLowerCase();
+
+    return {
+      isValid,
+      recoveredAddress,
+      expectedAddress: bridgeData.sender,
+    };
+  } catch (error) {
+    console.error("Error verifying signature:", error);
+    return {
+      isValid: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function main() {
@@ -113,10 +173,31 @@ async function main() {
       amount: params.amount,
       sender: params.sender,
       recipient: params.recipient,
+      // Don't log the private key
     });
 
-    const signature = await generateBridgeSignature(params);
+    const { signature, bridgeData } = await generateBridgeSignature(params);
     console.log("\nGenerated Signature:", signature);
+
+    // Verify the signature
+    console.log("\nVerifying signature...");
+    const verificationResult = await verifySignature(signature, bridgeData);
+
+    if (verificationResult.isValid) {
+      console.log("✅ Signature is VALID");
+      console.log(`Recovered address: ${verificationResult.recoveredAddress}`);
+      console.log(`Expected address: ${verificationResult.expectedAddress}`);
+    } else {
+      console.log("❌ Signature is INVALID");
+      if (verificationResult.error) {
+        console.log(`Error: ${verificationResult.error}`);
+      } else {
+        console.log(
+          `Recovered address: ${verificationResult.recoveredAddress}`
+        );
+        console.log(`Expected address: ${verificationResult.expectedAddress}`);
+      }
+    }
 
     // Print mutation example
     console.log("\nGraphQL Mutation Example:");
@@ -130,6 +211,7 @@ async function main() {
     sender: "${params.sender}"
     recipient: "${params.recipient}"
     signature: "${signature}"
+    deadline: ${bridgeData.deadline}
   ) {
     success
     transactionHash
@@ -149,7 +231,7 @@ async function main() {
 }
 
 // Export for testing
-export { generateBridgeSignature };
+export { generateBridgeSignature, verifySignature };
 
 if (require.main === module) {
   main()

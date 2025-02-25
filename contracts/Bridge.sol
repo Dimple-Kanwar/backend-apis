@@ -1,33 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "./BridgeValidator.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IPyth.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title Bridge
  * @dev Main bridge contract implementing lock and release functionality
  */
 contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
-    using ECDSA for bytes32;
 
     // Custom errors
-    error Unauthorized();      // For admin and validator checks
-    error InvalidInput();      // For invalid parameters
-    error AlreadyProcessed();  // For duplicate transactions
+    error Unauthorized(); // For admin and validator checks
+    error InvalidInput(); // For invalid parameters
+    error AlreadyProcessed(); // For duplicate transactions
     error InsufficientBalance();
     error TransferFailed();
     error RateLimitExceeded();
     error InvalidPriceFeed();
     error StalePrice();
-    error MaxValidatorsReached();
-    error ValidationFailed();
     error InvalidSignature();
     error SignatureExpired();
     error NonceAlreadyUsed();
@@ -37,13 +33,8 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
 
     // Storage optimization: Pack related variables together
     struct RateLimit {
-        uint64 lastTransferTime;   // 8 bytes
+        uint64 lastTransferTime; // 8 bytes
         uint192 transferredAmount; // 24 bytes - Sufficient for amount tracking
-    }
-
-    struct ValidatorInfo {
-        uint8 signatureCount;      // 1 byte - Max 255 signatures is sufficient
-        mapping(address => bool) hasValidated;
     }
 
     // Constants - Moved to immutable for gas savings
@@ -52,35 +43,26 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     uint256 private immutable ADMIN_DELAY;
     uint256 private immutable RATE_LIMIT_DURATION;
     uint256 private immutable MAX_TRANSFER_PER_HOUR;
-    uint256 private immutable REQUIRED_SIGNATURES;
-    uint16 private immutable MAX_VALIDATORS; // Max number of validators allowed
 
     // State variables
     address public admin;
     address public pythContract;
-    uint16 public validatorCount;  // Packed: Max 65535 validators is sufficient
 
     // Mappings
     mapping(address => bytes32) public tokenPriceFeeds;
     mapping(address => RateLimit) private rateLimits;
-    mapping(bytes32 => ValidatorInfo) private validatorInfo;
     mapping(bytes32 => bool) public processedHashes;
-    mapping(address => bool) public validators;
     mapping(address => uint256) public userNonces;
     mapping(address => bool) public blacklistedAccounts;
     mapping(address => uint256) public dailyOperationAmounts;
     mapping(address => uint256) public lastOperationDay;
-    
-    // Recovery mechanism
-    uint256 public constant RECOVERY_THRESHOLD = 3;  // Number of validators needed for recovery
-    mapping(address => mapping(address => bool)) public recoverySigners; // account => validator => has signed
 
     // Events
     event TokensLocked(
         address indexed token,
-        address indexed from,
+        address indexed sender,
         uint256 amount,
-        bytes32 indexed targetChainTxHash
+        bytes32 targetChainTxHash
     );
     event AdminChanged(address indexed previousAdmin, address indexed newAdmin);
     event NativeTokenLocked(
@@ -99,20 +81,13 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         uint256 amount,
         bytes32 indexed sourceChainTxHash
     );
-    event ValidatorAdded(address indexed validator);
-    event ValidatorRemoved(address indexed validator);
-    event SignatureSubmitted(bytes32 indexed txHash, address indexed validator);
     event PriceFeedUpdated(address indexed token, bytes32 indexed priceId);
     event PythContractUpdated(address indexed oldPyth, address indexed newPyth);
+    event AccountRecovered(address indexed compromisedAccount, address indexed newAccount);
 
     // Modifiers
     modifier onlyAdmin() {
         if (msg.sender != admin) revert Unauthorized();
-        _;
-    }
-
-    modifier onlyValidator() {
-        if (!validators[msg.sender]) revert Unauthorized();
         _;
     }
 
@@ -126,26 +101,25 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         uint16 _maxValidators
     ) Ownable(msg.sender) {
         if (_pythContract == address(0)) revert InvalidInput();
-        if (_requiredSignatures == 0 || _requiredSignatures > _maxValidators) revert InvalidInput();
+        if (_requiredSignatures == 0 || _requiredSignatures > _maxValidators)
+            revert InvalidInput();
         if (_maxValidators == 0) revert InvalidInput();
-        
+
         PRICE_FEED_MAX_AGE = _maxAge;
         ADMIN_DELAY = _adminDelay;
         RATE_LIMIT_DURATION = _rateLimitDuration;
         MAX_TRANSFER_PER_HOUR = _maxTransferPerHour;
-        REQUIRED_SIGNATURES = _requiredSignatures;
-        MAX_VALIDATORS = _maxValidators;
-        
+
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         admin = msg.sender;
-        validators[msg.sender] = true;
-        validatorCount = 1;
         pythContract = _pythContract;
 
         // Initialize EIP-712 domain separator
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
                 keccak256(bytes("DecimalBridge")),
                 keccak256(bytes("1")),
                 block.chainid,
@@ -154,7 +128,6 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         );
     }
 
-    // Owner function to change admin
     /**
      * @dev Updates the Pyth contract address
      * @param _pythContract The new Pyth contract address
@@ -188,7 +161,10 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
 
         // Cache pythContract to avoid multiple SLOADs
         address pythAddr = pythContract;
-        IPyth.PriceFeed memory priceFeed = IPyth(pythAddr).getPrice(priceId, PRICE_FEED_MAX_AGE);
+        IPyth.PriceFeed memory priceFeed = IPyth(pythAddr).getPrice(
+            priceId,
+            PRICE_FEED_MAX_AGE
+        );
 
         int64 rawPrice = priceFeed.price.price;
         if (rawPrice <= 0) revert InvalidPriceFeed();
@@ -196,7 +172,7 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         // Optimize exponent calculations
         int32 expo = priceFeed.price.expo;
         int256 normalizedPrice = int256(rawPrice);
-        
+
         unchecked {
             // Safe to use unchecked as expo bounds are known from Pyth
             if (expo < -8) {
@@ -218,19 +194,18 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         return uint256(normalizedPrice);
     }
 
-    // Main public function that admin calls
-    function executeTokenOperation(
+    // Lock tokens function
+    function lockToken(
         address token,
         address account,
         uint256 amount,
         bytes32 txHash,
-        bool isLock,  // true for lock, false for release
-        bytes calldata userSignature,  // User's signature for authorization
-        uint256 deadline,  // Timestamp after which the signature expires
-        uint256 nonce     // User's current nonce
-    ) external payable onlyAdmin {
+        bytes calldata userSignature, // User's signature for authorization
+        uint256 deadline, // Timestamp after which the signature expires
+        uint256 nonce // User's current nonce
+    ) external payable nonReentrant whenNotPaused {
         if (processedHashes[txHash]) revert AlreadyProcessed();
-        
+
         // Check if account is blacklisted
         if (blacklistedAccounts[account]) revert AccountBlacklisted();
 
@@ -250,7 +225,7 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
             account,
             amount,
             txHash,
-            isLock,
+            true, // Lock operation
             nonce,
             deadline,
             userSignature
@@ -258,71 +233,44 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
 
         // Check rate limit
         checkRateLimit(account, amount);
-        
+
+        // Check token approval
+        uint256 currentAllowance = IERC20(token).allowance(account, address(this));
+        require(currentAllowance >= amount, "Insufficient allowance to lock tokens");
+
         // For non-native tokens, check price feed
         if (token != address(0)) {
             uint256 tokenPrice = getLatestPrice(token);
             if (tokenPrice == 0) revert InvalidPriceFeed();
         }
-        
+
         // Process transaction
         processedHashes[txHash] = true;
-        
-        // Execute token operation based on isLock parameter
-        if (isLock) {
-            // For native token locks, check if sent amount matches
-            if (token == address(0)) {
-                if (msg.value != amount) revert InvalidInput();
-            }
-            _lockTokens(token, account, amount, txHash);
-        } else {
-            if (token == address(0)) {
-                // For native token releases, ensure contract has enough balance
-                if (address(this).balance < amount) revert InsufficientBalance();
-            }
-            _releaseTokens(token, account, amount, txHash);
+
+        // For native token locks, check if sent amount matches
+        if (token == address(0)) {
+            if (msg.value != amount) revert InvalidInput();
         }
+        _lockTokens(token, account, amount, txHash);
     }
 
-    // Validator management
-    function addValidator(address validator) external onlyAdmin {
-        if (validator == address(0)) revert InvalidInput();
-        if (validators[validator]) revert InvalidInput();
-        if (validatorCount >= MAX_VALIDATORS) revert MaxValidatorsReached();
-
-        validators[validator] = true;
-        unchecked { validatorCount++; }
-        emit ValidatorAdded(validator);
-    }
-
-    function removeValidator(address validator) external onlyAdmin {
-        if (validator == address(0)) revert InvalidInput();
-        if (!validators[validator]) revert InvalidInput();
-        if (validatorCount <= REQUIRED_SIGNATURES) revert InvalidInput();
-
-        validators[validator] = false;
-        unchecked { validatorCount--; }
-        emit ValidatorRemoved(validator);
-    }
-
-    function signTransaction(bytes32 txHash) external onlyValidator {
+    // Release tokens function
+    function releaseToken(
+        address token,
+        address account,
+        uint256 amount,
+        bytes32 txHash
+    ) external onlyAdmin nonReentrant whenNotPaused {
         if (processedHashes[txHash]) revert AlreadyProcessed();
-        
-        ValidatorInfo storage info = validatorInfo[txHash];
-        if (info.hasValidated[msg.sender]) revert InvalidInput();
 
-        info.hasValidated[msg.sender] = true;
-        unchecked { info.signatureCount++; }
-
-        emit SignatureSubmitted(txHash, msg.sender);
-
-        if (info.signatureCount >= uint8(REQUIRED_SIGNATURES)) {
-            processedHashes[txHash] = true;
+        // Ensure contract has enough balance for release
+        if (token == address(0)) {
+            if (address(this).balance < amount) revert InsufficientBalance();
         }
-    }
-
-    function hasValidatorSigned(bytes32 txHash, address validator) external view returns (bool) {
-        return validatorInfo[txHash].hasValidated[validator];
+      
+        // Process transaction
+        processedHashes[txHash] = true;
+        _releaseTokens(token, account, amount, txHash);
     }
 
     function checkRateLimit(address account, uint256 amount) internal {
@@ -351,16 +299,10 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         emit AdminChanged(oldAdmin, newAdmin);
     }
 
-    function isTransactionProcessed(bytes32 txHash) external view returns (bool) {
+    function isTransactionProcessed(
+        bytes32 txHash
+    ) external view returns (bool) {
         return processedHashes[txHash];
-    }
-
-    function getValidatorCount() external view returns (uint16) {
-        return validatorCount;
-    }
-
-    function getSignatureCount(bytes32 txHash) external view returns (uint8) {
-        return validatorInfo[txHash].signatureCount;
     }
 
     // Internal functions
@@ -369,7 +311,7 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         address from,
         uint256 amount,
         bytes32 targetChainTxHash
-    ) internal nonReentrant whenNotPaused {
+    ) internal {
         if (from == address(0)) revert InvalidInput();
         if (amount == 0) revert InvalidInput();
 
@@ -378,7 +320,11 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
             emit NativeTokenLocked(from, amount, targetChainTxHash);
         } else {
             // ERC20 token lock
-            bool success = IERC20(token).transferFrom(from, address(this), amount);
+            bool success = IERC20(token).transferFrom(
+                from,
+                address(this),
+                amount
+            );
             if (!success) revert TransferFailed();
             emit TokensLocked(token, from, amount, targetChainTxHash);
         }
@@ -389,7 +335,7 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         address recipient,
         uint256 amount,
         bytes32 sourceChainTxHash
-    ) internal nonReentrant whenNotPaused {
+    ) internal  {
         if (recipient == address(0)) revert InvalidInput();
         if (amount == 0) revert InvalidInput();
 
@@ -420,7 +366,10 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     /**
      * @dev Updates and checks the daily operation limit for an account
      */
-    function updateAndCheckDailyLimit(address account, uint256 amount) internal {
+    function updateAndCheckDailyLimit(
+        address account,
+        uint256 amount
+    ) internal {
         uint256 currentDay = block.timestamp / 1 days;
         if (currentDay > lastOperationDay[account]) {
             dailyOperationAmounts[account] = 0;
@@ -428,7 +377,8 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         }
 
         uint256 newDailyAmount = dailyOperationAmounts[account] + amount;
-        if (newDailyAmount > MAX_TRANSFER_PER_HOUR * 24) revert DailyLimitExceeded();
+        if (newDailyAmount > MAX_TRANSFER_PER_HOUR * 24)
+            revert DailyLimitExceeded();
         dailyOperationAmounts[account] = newDailyAmount;
     }
 
@@ -452,42 +402,35 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
      * @dev Emergency account recovery mechanism
      * @param compromisedAccount The account to recover
      * @param newAccount The new account to transfer control to
+     * @param signature The signature from the compromised account for authorization
      */
     function initiateAccountRecovery(
         address compromisedAccount,
-        address newAccount
-    ) external onlyValidator {
+        address newAccount,
+        bytes calldata signature
+    ) external onlyAdmin nonReentrant {
         if (newAccount == address(0)) revert InvalidInput();
         if (!blacklistedAccounts[compromisedAccount]) revert InvalidInput();
 
-        recoverySigners[compromisedAccount][msg.sender] = true;
-        
-        // Count signatures
-        uint256 sigCount;
-        for (uint256 i = 0; i < validatorCount; i++) {
-            if (recoverySigners[compromisedAccount][msg.sender]) {
-                sigCount++;
-            }
-        }
+        // Verify the signature
+        bytes32 messageHash = keccak256(abi.encodePacked(compromisedAccount, newAccount));
+        bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);
+        address signer = ECDSA.recover(ethSignedMessageHash, signature);
+        if (signer != compromisedAccount) revert Unauthorized();
 
-        // If enough validators have signed, perform the recovery
-        if (sigCount >= RECOVERY_THRESHOLD) {
-            // Transfer all relevant state to the new account
-            userNonces[newAccount] = userNonces[compromisedAccount];
-            dailyOperationAmounts[newAccount] = dailyOperationAmounts[compromisedAccount];
-            lastOperationDay[newAccount] = lastOperationDay[compromisedAccount];
+        // Transfer all relevant state to the new account
+        userNonces[newAccount] = userNonces[compromisedAccount];
+        dailyOperationAmounts[newAccount] = dailyOperationAmounts[compromisedAccount];
+        lastOperationDay[newAccount] = lastOperationDay[compromisedAccount];
 
-            // Clear old account state
-            delete userNonces[compromisedAccount];
-            delete dailyOperationAmounts[compromisedAccount];
-            delete lastOperationDay[compromisedAccount];
-            delete blacklistedAccounts[compromisedAccount];
+        // Clear old account state
+        delete userNonces[compromisedAccount];
+        delete dailyOperationAmounts[compromisedAccount];
+        delete lastOperationDay[compromisedAccount];
+        delete blacklistedAccounts[compromisedAccount];
 
-            // Clear recovery state
-            for (uint256 i = 0; i < validatorCount; i++) {
-                delete recoverySigners[compromisedAccount][msg.sender];
-            }
-        }
+        // Emit an event for recovery
+        emit AccountRecovered(compromisedAccount, newAccount);
     }
 
     /**
@@ -495,6 +438,10 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
      */
     function getCurrentNonce(address account) external view returns (uint256) {
         return userNonces[account];
+    }
+
+    function getEthSignedMessageHash(bytes32 _msgHash) internal pure returns(bytes32) {
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _msgHash));
     }
 
     /**
@@ -514,22 +461,27 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         uint256 nonce,
         uint256 deadline
     ) public view returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(abi.encode(
-                    keccak256("BridgeOperation(address token,address account,uint256 amount,bytes32 txHash,bool isLock,uint256 nonce,uint256 deadline)"),
-                    token,
-                    account,
-                    amount,
-                    txHash,
-                    isLock,
-                    nonce,
-                    deadline
-                ))
-            )
-        );
+        return
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    DOMAIN_SEPARATOR,
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "BridgeOperation(address token,address account,uint256 amount,bytes32 txHash,bool isLock,uint256 nonce,uint256 deadline)"
+                            ),
+                            token,
+                            account,
+                            amount,
+                            txHash,
+                            isLock,
+                            nonce,
+                            deadline
+                        )
+                    )
+                )
+            );
     }
 
     /**
@@ -545,11 +497,46 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         uint256 deadline,
         bytes calldata signature
     ) internal view {
-        bytes32 messageHash = getMessageHash(token, account, amount, txHash, isLock, nonce, deadline);
-        address signer = messageHash.recover(signature);
-        
+        bytes32 messageHash = getMessageHash(
+            token,
+            account,
+            amount,
+            txHash,
+            isLock,
+            nonce,
+            deadline
+        );
+        address signer = ECDSA.recover(messageHash, signature);
+
         // For lock operations, signer must be the account
         // For release operations, signer must be the recipient
         if (signer != account) revert InvalidSignature();
+    }
+
+    function splitSignature(bytes memory signature) internal pure returns(bytes32 r, bytes32 s, uint8 v) {
+        require(signature.length == 65, "Invalid signature length");
+        assembly {
+            /*
+            First 32 bytes stores the length of the signature
+
+            add(sig, 32) = pointer of sig + 32
+            effectively, skips first 32 bytes of signature
+
+            mload(p) loads next 32 bytes starting at the memory address p into memory
+            */
+
+            // first 32 bytes, after the length prefix
+            r := mload(add(signature, 32))
+            // second 32 bytes
+            s := mload(add(signature, 64))
+            // final byte (first byte of the next 32 bytes)
+            v := byte(0,mload(add(signature, 96)))
+        }
+        // implicitly return (r, s, v)        
+    }
+    
+    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory signature) internal pure returns(address){
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(signature);
+        return ECDSA.recover(_ethSignedMessageHash, v, r, s);
     }
 }

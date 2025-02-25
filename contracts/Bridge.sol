@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "./BridgeValidator.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
@@ -16,38 +15,41 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     address public admin;
     // uint256 public platformFeePercentage;
-    uint256 public constant ADMIN_DELAY = 2 days;
     uint256 public constant RATE_LIMIT_DURATION = 1 hours;
     uint256 public constant MAX_TRANSFER_PER_HOUR = 1000 ether;
+    uint256 public constant MAX_TRANSACTION_AMOUNT = 100 ether;
+    uint256 public constant MAX_TRANSACTIONS_PER_HOUR = 10;
+    uint256 public platformFeePercentage; // 0.3%
+    address public platformAddress; // Address to receive platform fees
 
     // Rate limiting
     mapping(address => uint256) public lastTransferTimestamp;
     mapping(address => uint256) public transferredInWindow;
-
-    // Multi-sig related
-    uint256 public constant REQUIRED_SIGNATURES = 2;
-    mapping(address => bool) public validators;
-    uint256 public validatorCount;
+    mapping(address => uint256) public transactionCount;
 
     // Transaction tracking
     mapping(bytes32 => bool) public processedHashes;
-    mapping(bytes32 => mapping(address => bool)) public validatorSignatures;
-    mapping(bytes32 => uint256) public signatureCount;
+
+    // Withdrawal tracking
+    mapping(address => uint256) public withdrawableTokens;
 
     // Events
     event TokensLocked(
         address indexed token,
-        address indexed from,
         uint256 amount,
+        address indexed from,
+        address to,
         bytes32 indexed targetChainTxHash
     );
     event AdminChanged(address indexed previousAdmin, address indexed newAdmin);
     event NativeTokenLocked(
         address indexed from,
+        address indexed to,
         uint256 amount,
         bytes32 indexed targetChainTxHash
     );
     event NativeTokenReleased(
+        address indexed from,
         address indexed to,
         uint256 amount,
         bytes32 indexed sourceChainTxHash
@@ -58,9 +60,10 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         uint256 amount,
         bytes32 indexed sourceChainTxHash
     );
-    event ValidatorAdded(address indexed validator);
-    event ValidatorRemoved(address indexed validator);
-    event SignatureSubmitted(bytes32 indexed txHash, address indexed validator);
+    event TokensWithdrawn(address indexed token, address indexed to, uint256 amount);
+    event PlatformFeeDeducted(address indexed token, uint256 fee);
+    event PlatformAddressChanged(address indexed newPlatformAddress);
+    event PlatformFeeChanged(uint256 newFeePercentage);
 
     // Custom errors for gas optimization
     error NotOwner();
@@ -69,28 +72,13 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     error AlreadyProcessed();
     error InsufficientBalance();
     error TransferFailed();
-    error NotValidator();
-    error AlreadyValidated();
-    error InvalidSignatureCount();
     error RateLimitExceeded();
 
-    // Modifiers
-    modifier onlyAdmin() {
-        if (msg.sender != admin) revert NotAdmin();
-        _;
-    }
-
-    modifier onlyValidator() {
-        if (!validators[msg.sender]) revert NotValidator();
-        _;
-    }
-
-    constructor() Ownable(msg.sender) {
-        // platformFeePercentage = _platformFeePercentage;
+    constructor(uint256 _platformFeePercentage) Ownable(msg.sender) {
+        platformAddress = msg.sender; // Set the platform address to the owner
+        platformFeePercentage = _platformFeePercentage; // Set the platform fee percentage
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         admin = msg.sender;
-        validators[msg.sender] = true;
-        validatorCount = 1;
     }
 
     // Owner function to change admin
@@ -101,135 +89,103 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         emit AdminChanged(oldAdmin, newAdmin);
     }
 
-    // Validator management
-    function addValidator(address validator) external onlyOwner {
-        if (validator == address(0)) revert InvalidAddress();
-        if (validators[validator]) revert AlreadyValidated();
-
-        validators[validator] = true;
-        validatorCount++;
-        emit ValidatorAdded(validator);
+    function addAdmin(address newAdmin) external onlyOwner {
+        require(newAdmin != address(0), "Invalid address");
+        _grantRole(DEFAULT_ADMIN_ROLE, newAdmin);
+        emit AdminChanged(address(0), newAdmin);
     }
 
-    function removeValidator(address validator) external onlyOwner {
-        if (!validators[validator]) revert NotValidator();
-        if (validatorCount <= REQUIRED_SIGNATURES)
-            revert InvalidSignatureCount();
-
-        validators[validator] = false;
-        validatorCount--;
-        emit ValidatorRemoved(validator);
+    function removeAdmin(address adminAddress) external onlyOwner {
+        require(adminAddress != address(0), "Invalid address");
+        require(adminAddress == admin, "Not the current admin");
+        _revokeRole(DEFAULT_ADMIN_ROLE, adminAddress);
+        emit AdminChanged(adminAddress, address(0));
     }
 
-    // Main public function that admin calls
-    function executeTokenOperation(
+    function lockTokens(
         address token,
         uint256 amount,
-        address account,
-        bytes32 txHash,
-        bool isLock
-    ) external onlyAdmin {
-        if (account == address(0)) revert InvalidAddress();
+        address from,
+        address to,
+        bytes32 txHash
+    ) public {
+        require(from != address(0), "Invalid address");
+        require(to != address(0), "Invalid address");
+        require(amount <= MAX_TRANSACTION_AMOUNT, "Amount exceeds limit");
         if (processedHashes[txHash]) revert AlreadyProcessed();
 
         // Rate limiting check
         uint256 currentWindow = block.timestamp / RATE_LIMIT_DURATION;
-        uint256 lastWindow = lastTransferTimestamp[account] /
-            RATE_LIMIT_DURATION;
+        uint256 lastWindow = lastTransferTimestamp[from] / RATE_LIMIT_DURATION;
 
         if (currentWindow > lastWindow) {
-            transferredInWindow[account] = 0;
+            transferredInWindow[from] = 0;
         }
 
-        if (transferredInWindow[account] + amount > MAX_TRANSFER_PER_HOUR) {
+        if (transferredInWindow[from] + amount > MAX_TRANSFER_PER_HOUR) {
             revert RateLimitExceeded();
         }
 
-        // Update rate limiting data
-        transferredInWindow[account] += amount;
-        lastTransferTimestamp[account] = block.timestamp;
-
+        // Locking logic here
+        lastTransferTimestamp[from] = block.timestamp;
+        transferredInWindow[from] += amount;
         processedHashes[txHash] = true;
-
-        if (isLock) {
-            _lockTokens(token, account, amount, txHash);
-        } else {
-            _releaseTokens(token, account, amount, txHash);
-        }
-    }
-
-    function signTransaction(bytes32 txHash) public onlyValidator {
-        if (processedHashes[txHash]) revert AlreadyProcessed();
-        if (validatorSignatures[txHash][msg.sender]) revert AlreadyValidated();
-        validatorSignatures[txHash][msg.sender] = true;
-        signatureCount[txHash]++;
-
-        emit SignatureSubmitted(txHash, msg.sender);
-
-        if (signatureCount[txHash] < REQUIRED_SIGNATURES) {
-            return;
-        }
-    }
-
-    // Internal functions
-    function _lockTokens(
-        address token,
-        address sender,
-        uint256 amount,
-        bytes32 targetChainTxHash
-    ) internal nonReentrant whenNotPaused {
         if (token == address(0)) {
             if (address(this).balance < amount) revert InsufficientBalance();
-            emit NativeTokenLocked(sender, amount, targetChainTxHash);
+            emit NativeTokenLocked(from, to, amount, txHash);
         } else {
             bool success = IERC20(token).transferFrom(
-                sender,
+                from,
                 address(this),
                 amount
             );
             if (!success) revert TransferFailed();
-            emit TokensLocked(token, sender, amount, targetChainTxHash);
+            emit TokensLocked(token, amount, from, to, txHash);
         }
     }
 
-    // decimal fee deduction 0.3% of the transaction amount, add gas fee with this 0.3%
-
-    function _releaseTokens(
+    function releaseTokens(
         address token,
-        address recipient,
         uint256 amount,
-        // bytes memory signature,
+        address recipient,
         bytes32 sourceChainTxHash
-    ) internal nonReentrant whenNotPaused {
-        if (recipient == address(0)) revert InvalidAddress();
-        if (token == address(0)) {
-            // Handle native token
-            if (address(this).balance < amount) revert InsufficientBalance();
-            (bool success, ) = recipient.call{value: amount}("");
-            if (!success) revert TransferFailed();
-            emit NativeTokenReleased(recipient, amount, sourceChainTxHash);
-        } else {
-            // Handle ERC20 token
-            bool success = IERC20(token).transfer(recipient, amount);
-            if (!success) revert TransferFailed();
-            emit TokensReleased(token, recipient, amount, sourceChainTxHash);
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+        require(recipient != address(0), "Invalid address");
+        require(amount <= MAX_TRANSACTION_AMOUNT, "Amount exceeds limit");
+
+        uint256 currentWindow = block.timestamp / RATE_LIMIT_DURATION;
+        if (lastTransferTimestamp[recipient] < currentWindow) {
+            transferredInWindow[recipient] = 0;
         }
 
         // Calculate platform fee
-        // uint256 platformFee = (amount * platformFeePercentage)/10000;
+        uint256 fee = (amount * platformFeePercentage) / 10000; // Assuming percentage is in basis points
+        uint256 amountAfterFee = amount - fee;
 
-        // // Ensure sufficient amount remains after deducting fees
-        // require(amount > platformFee, "Amount too low after fees");
+        // Transfer the fee to the platform
+        if (token == address(0)) {
+            require(address(this).balance >= amount, "Insufficient balance");
+            (bool success, ) = platformAddress.call{value: fee}(''); // Transfer fee to platform
+            require(success, "Fee transfer failed");
+            (success, ) = recipient.call{value: amountAfterFee}('');
+            require(success, "Transfer failed");
+        } else {
+            require(IERC20(token).transfer(platformAddress, fee), "Fee transfer failed");
+            require(IERC20(token).transfer(recipient, amountAfterFee), "Transfer failed");
+        }
 
-        // uint256 finalAmount = amount - platformFee;
+        withdrawableTokens[recipient] += amountAfterFee; // Track withdrawable tokens
+        emit TokensReleased(token, recipient, amountAfterFee, sourceChainTxHash);
+        emit PlatformFeeDeducted(token, fee); // Emit an event for fee deduction
+    }
 
-        // release tokens to recipient account
-        // IERC20(token).transfer(recipient, amount);
+    function withdrawTokens() external nonReentrant {
+        uint256 amount = withdrawableTokens[msg.sender];
+        require(amount > 0, "No tokens to withdraw");
+        withdrawableTokens[msg.sender] = 0;
 
-        // // Transfer platform fee to the decimal account
-        // // IERC20(token).transfer(msg.sender, platformFee);
-
-        // tokenBalances[token][chainId] -= amount;
+        require(IERC20(address(0)).transfer(msg.sender, amount), "Transfer failed");
+        emit TokensWithdrawn(address(0), msg.sender, amount);
     }
 
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -238,6 +194,18 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
 
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
+    }
+
+    function setPlatformAddress(address newPlatformAddress) external onlyOwner {
+        require(newPlatformAddress != address(0), "Invalid address");
+        platformAddress = newPlatformAddress;
+        emit PlatformAddressChanged(newPlatformAddress);
+    }
+
+    function setPlatformFee(uint256 newFeePercentage) external onlyOwner {
+        require(newFeePercentage > 0, "Fee must be greater than zero");
+        platformFeePercentage = newFeePercentage;
+        emit PlatformFeeChanged(newFeePercentage);
     }
 
     // Function to receive native tokens

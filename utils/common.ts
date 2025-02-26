@@ -5,7 +5,7 @@ export const generateLockHash = async(
     token: string,
     sender: string,
     recipient: string,
-    amount: bigint,
+    amount: string,
     nonce: number,
     sourceChainId: number,
     targetChainId: number
@@ -14,7 +14,7 @@ export const generateLockHash = async(
         token,
         sender,
         recipient,
-        amount,
+        ethers.parseEther(amount),
         nonce,
         Math.floor(Date.now() / 1000), // Current timestamp
         sourceChainId,

@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "hardhat/console.sol";
 
 /**
  * @title Bridge
@@ -19,7 +20,7 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     uint256 public constant MAX_TRANSFER_PER_HOUR = 1000 ether;
     uint256 public constant MAX_TRANSACTION_AMOUNT = 100 ether;
     uint256 public constant MAX_TRANSACTIONS_PER_HOUR = 10;
-    uint256 public platformFeePercentage; // 0.3%
+    uint256 public platformFeePercentage; // 300 for 3%
     address public platformAddress; // Address to receive platform fees
 
     // Rate limiting
@@ -30,8 +31,8 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     // Transaction tracking
     mapping(bytes32 => bool) public processedHashes;
 
-    // Withdrawal tracking
-    mapping(address => uint256) public withdrawableTokens;
+    // Mapping to track withdrawable tokens for each recipient and token
+    mapping(address => mapping(address => uint256)) public withdrawableTokens;
 
     // Events
     event TokensLocked(
@@ -60,7 +61,11 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         uint256 amount,
         bytes32 indexed sourceChainTxHash
     );
-    event TokensWithdrawn(address indexed token, address indexed to, uint256 amount);
+    event TokensWithdrawn(
+        address indexed token,
+        address indexed recipient,
+        uint256 amount
+    );
     event PlatformFeeDeducted(address indexed token, uint256 fee);
     event PlatformAddressChanged(address indexed newPlatformAddress);
     event PlatformFeeChanged(uint256 newFeePercentage);
@@ -105,42 +110,48 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     function lockTokens(
         address token,
         uint256 amount,
-        address from,
         address to,
         bytes32 txHash
-    ) public {
-        require(from != address(0), "Invalid address");
-        require(to != address(0), "Invalid address");
+    ) public payable {
+        require(to != address(0), "Invalid recipient address");
+        require(amount > 0, "Amount must be greater than zero");
         require(amount <= MAX_TRANSACTION_AMOUNT, "Amount exceeds limit");
+
+        // Ensure the transaction hash has not been processed before
         if (processedHashes[txHash]) revert AlreadyProcessed();
 
         // Rate limiting check
         uint256 currentWindow = block.timestamp / RATE_LIMIT_DURATION;
-        uint256 lastWindow = lastTransferTimestamp[from] / RATE_LIMIT_DURATION;
+        uint256 lastWindow = lastTransferTimestamp[msg.sender] /
+            RATE_LIMIT_DURATION;
 
         if (currentWindow > lastWindow) {
-            transferredInWindow[from] = 0;
+            transferredInWindow[msg.sender] = 0;
         }
 
-        if (transferredInWindow[from] + amount > MAX_TRANSFER_PER_HOUR) {
+        if (transferredInWindow[msg.sender] + amount > MAX_TRANSFER_PER_HOUR) {
             revert RateLimitExceeded();
         }
 
-        // Locking logic here
-        lastTransferTimestamp[from] = block.timestamp;
-        transferredInWindow[from] += amount;
+        // Update rate-limiting state
+        lastTransferTimestamp[msg.sender] = block.timestamp;
+        transferredInWindow[msg.sender] += amount;
         processedHashes[txHash] = true;
+
+        // Handle locking logic
         if (token == address(0)) {
-            if (address(this).balance < amount) revert InsufficientBalance();
-            emit NativeTokenLocked(from, to, amount, txHash);
+            // Native token (ETH)
+            require(msg.value == amount, "Incorrect ETH amount sent");
+            emit NativeTokenLocked(msg.sender, to, amount, txHash);
         } else {
+            // ERC20 token: Transfer tokens from sender to the bridge contract
             bool success = IERC20(token).transferFrom(
-                from,
+                msg.sender,
                 address(this),
                 amount
             );
             if (!success) revert TransferFailed();
-            emit TokensLocked(token, amount, from, to, txHash);
+            emit TokensLocked(token, amount, msg.sender, to, txHash);
         }
     }
 
@@ -153,39 +164,117 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         require(recipient != address(0), "Invalid address");
         require(amount <= MAX_TRANSACTION_AMOUNT, "Amount exceeds limit");
 
+        // Rate limiting logic
         uint256 currentWindow = block.timestamp / RATE_LIMIT_DURATION;
         if (lastTransferTimestamp[recipient] < currentWindow) {
             transferredInWindow[recipient] = 0;
         }
+        require(
+            transferredInWindow[recipient] + amount <= MAX_TRANSACTION_AMOUNT,
+            "Rate limit exceeded"
+        );
 
         // Calculate platform fee
+        require(
+            platformFeePercentage <= 10000,
+            "Invalid platform fee percentage"
+        );
         uint256 fee = (amount * platformFeePercentage) / 10000; // Assuming percentage is in basis points
+        console.log("Fee: ", fee);
+        require(fee <= amount, "Fee exceeds amount");
         uint256 amountAfterFee = amount - fee;
-
-        // Transfer the fee to the platform
+        console.log("Amount after fee: ", amountAfterFee);
+        // Ensure sufficient balance
         if (token == address(0)) {
+            // Native token (ETH)
             require(address(this).balance >= amount, "Insufficient balance");
-            (bool success, ) = platformAddress.call{value: fee}(''); // Transfer fee to platform
+            (bool success, ) = platformAddress.call{value: fee}(""); // Transfer fee to platform
             require(success, "Fee transfer failed");
-            (success, ) = recipient.call{value: amountAfterFee}('');
+            (success, ) = recipient.call{value: amountAfterFee}("");
             require(success, "Transfer failed");
+            emit NativeTokenReleased(
+                address(this),
+                recipient,
+                amountAfterFee,
+                sourceChainTxHash
+            );
         } else {
-            require(IERC20(token).transfer(platformAddress, fee), "Fee transfer failed");
-            require(IERC20(token).transfer(recipient, amountAfterFee), "Transfer failed");
+            // ERC20 token
+            require(
+                IERC20(token).balanceOf(address(this)) >= amount,
+                "Insufficient token balance"
+            );
+            require(
+                IERC20(token).transfer(platformAddress, fee),
+                "Fee transfer failed"
+            );
+            require(
+                IERC20(token).approve(recipient, amountAfterFee),
+                "Approval failed"
+            );
+            emit TokensReleased(
+                token,
+                recipient,
+                amountAfterFee,
+                sourceChainTxHash
+            );
         }
 
-        withdrawableTokens[recipient] += amountAfterFee; // Track withdrawable tokens
-        emit TokensReleased(token, recipient, amountAfterFee, sourceChainTxHash);
+        // Track withdrawable tokens
+        withdrawableTokens[recipient][token] += amountAfterFee;
+
+        // Emit events
         emit PlatformFeeDeducted(token, fee); // Emit an event for fee deduction
     }
 
-    function withdrawTokens() external nonReentrant {
-        uint256 amount = withdrawableTokens[msg.sender];
+    function withdrawTokens(address token) external nonReentrant {
+        // Get the amount of tokens the sender is allowed to withdraw
+        uint256 amount = withdrawableTokens[msg.sender][token];
         require(amount > 0, "No tokens to withdraw");
-        withdrawableTokens[msg.sender] = 0;
 
-        require(IERC20(address(0)).transfer(msg.sender, amount), "Transfer failed");
-        emit TokensWithdrawn(address(0), msg.sender, amount);
+        // Deduct platform fee
+        uint256 fee = (amount * platformFeePercentage) / 10000;
+        uint256 netAmount = amount - fee;
+
+        // Transfer tokens to the recipient and platform fee to the platform address
+        if (token == address(0)) {
+            // Native token (ETH)
+            require(
+                address(this).balance >= amount,
+                "Insufficient ETH balance"
+            );
+            (bool success, ) = platformAddress.call{value: fee}(""); // Transfer fee to platform
+            require(success, "Fee transfer failed");
+            (success, ) = msg.sender.call{value: netAmount}(""); // Transfer net amount to recipient
+            require(success, "Transfer failed");
+        } else {
+            // ERC20 token
+            require(
+                IERC20(token).balanceOf(address(this)) >= amount,
+                "Insufficient token balance"
+            );
+            require(
+                IERC20(token).transfer(platformAddress, fee),
+                "Fee transfer failed"
+            );
+            require(
+                IERC20(token).transfer(msg.sender, netAmount),
+                "Transfer failed"
+            );
+        }
+        // Reset the withdrawable balance for the specified token
+        withdrawableTokens[msg.sender][token] = 0;
+
+        // Update rate limiting state
+        uint256 currentWindow = block.timestamp / RATE_LIMIT_DURATION;
+        if (lastTransferTimestamp[msg.sender] < currentWindow) {
+            transferredInWindow[msg.sender] = 0;
+        }
+        transferredInWindow[msg.sender] += netAmount;
+        lastTransferTimestamp[msg.sender] = currentWindow;
+
+        // Emit event
+        emit TokensWithdrawn(token, msg.sender, netAmount);
     }
 
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {

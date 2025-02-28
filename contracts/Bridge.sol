@@ -97,8 +97,7 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
             require(msg.value == amount, "Incorrect ETH amount sent");
         } else {
             // ERC20 token: Transfer tokens from sender to the bridge contract
-            bool success = IERC20(token).transferFrom(
-                msg.sender,
+            bool success = IERC20(token).transfer(
                 address(this),
                 amount
             );

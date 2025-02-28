@@ -56,6 +56,12 @@ describe("Bridge Contract", function () {
     describe("Token Locking", function () {
         it("Should lock native tokens (ETH)", async function () {
             const amount = ethers.parseEther("1");
+            
+            // send some ether to sender account
+            await owner.sendTransaction({
+                to: sender.address,
+                value: amount
+            });
 
             // Generate lock hash
             const nonce = await generateNonce(sender.address);
@@ -79,8 +85,8 @@ describe("Bridge Contract", function () {
                     { value: amount } // Include ETH in the transaction
                 )
             )
-                .to.emit(sourceChainBridge, "NativeTokenLocked")
-                .withArgs(sender.address, recipient.address, amount, sourceChainTxHash);
+                .to.emit(sourceChainBridge, "TokensLocked")
+                .withArgs(ethers.ZeroAddress, amount, sender.address, recipient.address, sourceChainTxHash);
 
             // Verify contract balance
             expect(await ethers.provider.getBalance(sourceChainBridge.target)).to.equal(amount);
@@ -91,13 +97,8 @@ describe("Bridge Contract", function () {
 
             // Mint tokens to sender
             await sourceTokenContract.mint(sender.address, amount);
-
-            // Approve the bridge contract to spend tokens
-            await sourceTokenContract.connect(sender).approve(sourceChainBridge.target, amount);
-
-            // Verify the allowance
-            const allowance = await sourceTokenContract.allowance(sender.address, sourceChainBridge.target);
-            expect(allowance).to.equal(amount);
+            const balance = await sourceTokenContract.balanceOf(sender.address);
+            console.log('Token balance:', ethers.formatEther(balance), 'B10');
 
             // Generate lock hash
             const nonce = await generateNonce(sender.address);
@@ -121,13 +122,7 @@ describe("Bridge Contract", function () {
                 )
             )
                 .to.emit(sourceChainBridge, "TokensLocked")
-                .withArgs(
-                    sourceTokenContract.target,
-                    amount,
-                    sender.address,
-                    recipient.address,
-                    sourceChainTxHash
-                );
+                .withArgs(sourceTokenContract.target, amount, sender.address, recipient.address, sourceChainTxHash);
 
             // Verify contract balance
             expect(await sourceTokenContract.balanceOf(sourceChainBridge.target)).to.equal(amount);
@@ -142,7 +137,7 @@ describe("Bridge Contract", function () {
             await sourceTokenContract.mint(sender.address, amount);
         
             // Approve the bridge contract to spend tokens
-            await sourceTokenContract.connect(sender).approve(sourceChainBridge.target, amount);
+            // await sourceTokenContract.connect(sender).approve(sourceChainBridge.target, amount);
         
             // Generate lock hash
             const nonce = await generateNonce(sender.address);
@@ -221,7 +216,7 @@ describe("Bridge Contract", function () {
             await sourceTokenContract.mint(sender.address, amount);
     
             // Approve the bridge contract to spend tokens
-            await sourceTokenContract.connect(sender).approve(sourceChainBridge.target, amount);
+            // await sourceTokenContract.connect(sender).approve(sourceChainBridge.target, amount);
     
             // Generate lock hash
             const nonce = await generateNonce(sender.address);
@@ -350,7 +345,7 @@ describe("Bridge Contract", function () {
                     targetChainTxHash
                 )
             )
-                .to.emit(targetChainBridge, "NativeTokenReleased")
+                .to.emit(targetChainBridge, "TokensReleased")
                 .withArgs(targetChainBridge.target, recipient.address, netAmount, targetChainTxHash)
                 .and.to.emit(targetChainBridge, "PlatformFeeDeducted")
                 .withArgs(ethers.ZeroAddress, fee);

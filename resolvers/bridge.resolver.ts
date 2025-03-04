@@ -27,7 +27,6 @@ export const bridgeResolvers = {
           amount,
           sender,
           recipient,
-          signature,
         });
       } catch (error: unknown) {
         const errorMessage =

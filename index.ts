@@ -9,7 +9,7 @@ import { loadSchema } from "./schema/schema";
 import { connectDB } from "./database/connection";
 import { BridgeService } from "./services/bridge.service";
 import { ApiKeyService } from "./services/apikey.service";
-
+import { BridgeEventService } from "./services/events.service";
 const app = express();
 const httpServer = createServer(app);
 
@@ -36,7 +36,10 @@ async function startServer() {
     });
 
     await server.start();
-
+    const bridgeEventService = new BridgeEventService();
+    // Start listening for TokensLocked and TokensReleased events
+    await bridgeEventService.startListening();
+    
     app.use(
       "/graphql",
       cors<cors.CorsRequest>(corsOptions),

@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { MockERC20 } from "../typechain-types";
+import { MockERC20Token } from "../typechain-types";
 import { abi as tokenAbi } from "../artifacts/contracts/MockERC20Token.sol/MockERC20Token.json";
 import "dotenv/config";
 
@@ -34,7 +34,7 @@ async function mintTokens(chain: ChainConfig, amount: string) {
     chain.tokenAddress,
     tokenAbi,
     owner
-  ) as unknown as MockERC20;
+  ) as unknown as MockERC20Token;
 
   // Get current balance
   const balanceBefore = await tokenContract.balanceOf(owner.address);
@@ -56,7 +56,7 @@ async function mintTokens(chain: ChainConfig, amount: string) {
 async function main() {
   try {
     // Amount to mint on each chain
-    const amount = "1000";
+    const amount = "10000";
 
     // Mint on Base Sepolia
     await mintTokens(CHAINS.baseSepolia, amount);

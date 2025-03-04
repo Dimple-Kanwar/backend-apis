@@ -24,12 +24,16 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
 
     // Events
     event TokensLocked(
-        address indexed token,
+        address indexed sourceToken,
+        address indexed targetToken,
         uint256 amount,
-        address indexed from,
+        address from,
         address to,
+        uint256 sourceChainId, 
+        uint256 targetChainId,
         bytes32 indexed targetChainTxHash
     );
+
     event AdminChanged(address indexed previousAdmin, address indexed newAdmin);
     event TokensReleased(
         address indexed token,
@@ -80,9 +84,12 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
     }
 
     function lockTokens(
-        address token,
+        address sourceToken,
+        address targetToken,
         uint256 amount,
         address to,
+        uint256 sourceChainId,
+        uint256 targetChainId,
         bytes32 targetChainTxHash
     ) public payable {
         require(to != address(0), "Invalid recipient address");
@@ -92,19 +99,22 @@ contract Bridge is ReentrancyGuard, Pausable, AccessControl, Ownable {
         if (processedHashes[targetChainTxHash]) revert AlreadyProcessed();
 
         // Handle locking logic
-        if (token == address(0)) {
+        if (sourceToken == address(0)) {
             // Native token (ETH)
             require(msg.value == amount, "Incorrect ETH amount sent");
         } else {
-            // ERC20 token: Transfer tokens from sender to the bridge contract
-            bool success = IERC20(token).transfer(
+            // Ensure the caller has approved the bridge to spend their tokens
+            uint256 allowance = IERC20(sourceToken).allowance(msg.sender, address(this));
+            require(allowance >= amount, "Insufficient allowance");
+
+            bool success = IERC20(sourceToken).transferFrom(msg.sender,
                 address(this),
                 amount
             );
             if (!success) revert TransferFailed();
         }
         processedHashes[targetChainTxHash] = true;
-        emit TokensLocked(token, amount, msg.sender, to, targetChainTxHash);
+        emit TokensLocked(sourceToken, targetToken, amount, msg.sender, to, sourceChainId, targetChainId, targetChainTxHash);
     }
 
     function releaseTokens(

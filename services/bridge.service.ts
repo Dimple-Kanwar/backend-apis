@@ -1,4 +1,4 @@
-import { ethers, Contract, JsonRpcProvider, Wallet } from "ethers";
+import { ethers, Contract, JsonRpcProvider } from "ethers";
 import { abi as tokenAbi } from "../artifacts/contracts/MockERC20Token.sol/MockERC20Token.json";
 import { abi as bridgeAbi } from "../artifacts/contracts/Bridge.sol/Bridge.json";
 import {
@@ -6,104 +6,183 @@ import {
   generateNonce,
   generateReleaseHash,
 } from "../utils/common";
-// import { Bridge, MockERC20 } from "../typechain-types";
 import { BridgeEventService } from "./events.service";
 import { CHAIN_CONFIGS } from "../config/chains";
+import "dotenv/config";
 
 export class BridgeService {
-  private sourceProvider: JsonRpcProvider;
-  private targetProvider: JsonRpcProvider;
-  private sourceChainBridge: Contract;
-  private targetChainBridge: Contract;
-  private sourceTokenContract!: Contract;
-  private targetTokenContract!: Contract;
-  private owner: Wallet;
-  private sender: Wallet;
-  private recipient: Wallet;
-  private sourceEventService: BridgeEventService;
-  private targetEventService: BridgeEventService;
+  private providers: Map<number, JsonRpcProvider>;
+  private bridges: Map<number, Contract>;
+  public eventServices: Map<number, BridgeEventService>;
+  private owner: ethers.Wallet;
 
   constructor() {
-    if (
-      !process.env.ADMIN_ACCOUNT_PK ||
-      !process.env.USER1_PK ||
-      !process.env.USER2_PK
-    ) {
-      throw new Error("Required private keys not set");
-    }
-    if (!CHAIN_CONFIGS[84532]) {
-      throw new Error("Source Chain ID not supported");
-    }
-    if (!CHAIN_CONFIGS[11155111]) {
-      throw new Error("Target Chain ID not supported");
+    if (!process.env.ADMIN_ACCOUNT_PK) {
+      throw new Error("Admin private key not set");
     }
 
-    this.sourceProvider = new ethers.JsonRpcProvider(
-      CHAIN_CONFIGS[84532].rpcUrl
-    );
-    this.targetProvider = new ethers.JsonRpcProvider(
-      CHAIN_CONFIGS[11155111].rpcUrl
-    );
-    this.owner = new Wallet(process.env.ADMIN_ACCOUNT_PK, this.sourceProvider);
-    this.sender = new Wallet(process.env.USER1_PK, this.sourceProvider);
-    this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
+    // Initialize maps for providers, bridges, and event services
+    this.providers = new Map();
+    this.bridges = new Map();
+    this.eventServices = new Map();
 
-    this.sourceChainBridge = new Contract(
-      CHAIN_CONFIGS[84532].bridgeAddress,
-      bridgeAbi,
-      this.owner
-    );
-    this.targetChainBridge = new Contract(
-      CHAIN_CONFIGS[11155111].bridgeAddress,
-      bridgeAbi,
-      this.owner.connect(this.targetProvider)
-    );
+    // Initialize the admin wallet
+    this.owner = new ethers.Wallet(process.env.ADMIN_ACCOUNT_PK);
 
-    this.sourceEventService = new BridgeEventService(
-      CHAIN_CONFIGS[84532].wsRpcUrl,
-      CHAIN_CONFIGS[84532].bridgeAddress
-    );
-    this.targetEventService = new BridgeEventService(
-      CHAIN_CONFIGS[11155111].wsRpcUrl,
-      CHAIN_CONFIGS[11155111].bridgeAddress
-    );
+    // Dynamically initialize providers, bridges, and event services for all chains
+    for (const [chainId, config] of Object.entries(CHAIN_CONFIGS)) {
+      const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+      const bridge = new Contract(config.bridgeAddress, bridgeAbi, this.owner.connect(provider));
+      const eventService = new BridgeEventService();
+
+      this.providers.set(Number(chainId), provider);
+      this.bridges.set(Number(chainId), bridge);
+      this.eventServices.set(Number(chainId), eventService);
+    }
   }
+
   private async verifyReleaseState(
+    targetChainId: number,
     targetToken: string,
     amount: bigint,
     releaseHash: string,
     recipient: string
   ): Promise<void> {
     try {
+      const targetChainBridge = this.bridges.get(targetChainId);
+      const targetProvider = this.providers.get(targetChainId);
+
+      if (!targetChainBridge || !targetProvider) {
+        throw new Error(`Chain ID ${targetChainId} not supported`);
+      }
+
       // Check if release hash is already processed
-      const isProcessed = await this.targetChainBridge.processedHashes(
-        releaseHash
-      );
+      const isProcessed = await targetChainBridge.processedHashes(releaseHash);
       if (isProcessed) {
         throw new Error("Release hash already processed");
       }
 
+      // Initialize target token contract
+      const targetTokenContract = new Contract(targetToken, tokenAbi, this.owner.connect(targetProvider));
+
       // Check bridge balance
-      const bridgeBalance = await this.targetTokenContract.balanceOf(
-        this.targetChainBridge.target
-      );
+      const bridgeBalance = await targetTokenContract.balanceOf(targetChainBridge.target);
       console.log("Bridge balance:", bridgeBalance.toString());
       console.log("Required amount:", amount.toString());
 
       if (bridgeBalance < amount) {
-        throw new Error(
-          `Insufficient bridge balance. Has: ${bridgeBalance}, Needs: ${amount}`
-        );
+        throw new Error(`Insufficient bridge balance. Has: ${bridgeBalance}, Needs: ${amount}`);
       }
 
       // Verify recipient address
-      const code = await this.targetProvider.getCode(recipient);
+      const code = await targetProvider.getCode(recipient);
       if (code !== "0x") {
         throw new Error("Recipient cannot be a contract");
       }
     } catch (error) {
       console.error("Release state verification failed:", error);
       throw error;
+    }
+  }
+
+  public async releaseTokens(request: {
+    targetToken: string;
+    sourceChainId: number;
+    targetChainId: number;
+    amount: string;
+    sender: string;
+    recipient: string;
+    lockTxHash: string;
+  }): Promise<any> {
+    try {
+      const {
+        targetToken,
+        targetChainId,
+        amount,
+        sender,
+        recipient,
+        lockTxHash,
+        sourceChainId,
+      } = request;
+      const targetProvider = new ethers.JsonRpcProvider(
+        process.env.SEPOLIA_TESTNET_RPC!
+      );
+      console.log({targetProvider});
+      const targetChainBridge =  new Contract(process.env.SEPOLIA_BRIDGE_ADDRESS!, bridgeAbi, this.owner.connect(targetProvider)); 
+      
+      console.log({targetChainBridge});
+      // const targetEventService = this.eventServices.get(targetChainId);
+
+      if (!targetProvider || !targetChainBridge) {
+        throw new Error(`Target Chain ID ${targetChainId} not supported`);
+      }
+
+      // Initialize target token contract
+      const targetTokenContract = new Contract(targetToken, tokenAbi, this.owner.connect(targetProvider));
+
+      const formattedAmount = ethers.parseEther(amount);
+
+      // Generate release hash
+      const nonce = await generateNonce(sender);
+      const releaseHash = await generateReleaseHash(
+        targetToken,
+        sender,
+        recipient,
+        formattedAmount,
+        nonce,
+        lockTxHash,
+        sourceChainId,
+        targetChainId
+      );
+      console.log("Release hash:", releaseHash);
+
+      // Verify release state
+      // await this.verifyReleaseState(targetChainId, targetToken, formattedAmount, releaseHash, recipient);
+
+      // Estimate gas for release operation
+      const estimatedGas = await targetChainBridge.releaseTokens.estimateGas(
+        targetToken,
+        formattedAmount,
+        recipient,
+        releaseHash
+      );
+
+      // Execute release operation
+      const releaseTx = await targetChainBridge.releaseTokens(
+        targetToken,
+        formattedAmount,
+        recipient,
+        releaseHash,
+        {
+          gasLimit: Math.ceil(Number(estimatedGas) * 1.2), // Add 20% buffer
+        }
+      );
+
+      // // Wait for release event and confirmation
+      // const [releaseEvent, releaseReceipt] = await Promise.all([
+      //   targetEventService.waitForEvent("TokensReleased"),
+      //   releaseTx.wait(),
+      // ]);
+      console.log("Release transaction completed:", releaseTx.hash);
+
+      // Verify recipient received tokens
+      const recipientBalance = await targetTokenContract.balanceOf(recipient);
+      if (recipientBalance < formattedAmount) {
+        throw new Error("Release operation failed: Recipient did not receive tokens");
+      }
+
+      return {
+        success: true,
+        txHash: releaseTx.hash,
+        status: "COMPLETED",
+      };
+    } catch (error) {
+      console.error("Release operation failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+        status: "FAILED",
+      };
     }
   }
 
@@ -115,7 +194,6 @@ export class BridgeService {
     amount: string;
     sender: string;
     recipient: string;
-    signature: string;
   }): Promise<any> {
     try {
       const {
@@ -126,144 +204,31 @@ export class BridgeService {
         amount,
         sender,
         recipient,
-        signature,
       } = request;
 
+      const sourceProvider = this.providers.get(sourceChainId);
+      const targetProvider = this.providers.get(targetChainId);
+      const sourceChainBridge = this.bridges.get(sourceChainId);
+      const targetChainBridge = this.bridges.get(targetChainId);
+      const sourceEventService = this.eventServices.get(sourceChainId);
+      const targetEventService = this.eventServices.get(targetChainId);
+
       if (
-        !process.env.ADMIN_ACCOUNT_PK ||
-        !process.env.USER1_PK ||
-        !process.env.USER2_PK
+        !sourceProvider ||
+        !targetProvider ||
+        !sourceChainBridge ||
+        !targetChainBridge ||
+        !sourceEventService ||
+        !targetEventService
       ) {
-        throw new Error("Required private keys not set");
+        throw new Error("Source or Target Chain ID not supported");
       }
-      if (!CHAIN_CONFIGS[sourceChainId]) {
-        throw new Error("Source Chain ID not supported");
-      }
-      if (!CHAIN_CONFIGS[targetChainId]) {
-        throw new Error("Target Chain ID not supported");
-      }
-
-      this.sourceProvider = new ethers.JsonRpcProvider(
-        CHAIN_CONFIGS[sourceChainId].rpcUrl
-      );
-      this.targetProvider = new ethers.JsonRpcProvider(
-        CHAIN_CONFIGS[targetChainId].rpcUrl
-      );
-      this.owner = new Wallet(
-        process.env.ADMIN_ACCOUNT_PK,
-        this.sourceProvider
-      );
-      this.sender = new Wallet(process.env.USER1_PK, this.sourceProvider);
-      this.recipient = new Wallet(process.env.USER2_PK, this.targetProvider);
-
-      this.sourceChainBridge = new Contract(
-        CHAIN_CONFIGS[sourceChainId].bridgeAddress,
-        bridgeAbi,
-        this.owner
-      );
-      this.targetChainBridge = new Contract(
-        CHAIN_CONFIGS[targetChainId].bridgeAddress,
-        bridgeAbi,
-        this.owner.connect(this.targetProvider)
-      );
-
-      this.sourceEventService = new BridgeEventService(
-        CHAIN_CONFIGS[sourceChainId].wsRpcUrl,
-        CHAIN_CONFIGS[sourceChainId].bridgeAddress
-      );
-      this.targetEventService = new BridgeEventService(
-        CHAIN_CONFIGS[targetChainId].wsRpcUrl,
-        CHAIN_CONFIGS[targetChainId].bridgeAddress
-      );
-      console.log("Starting bridge operation:", request);
 
       // Initialize token contracts
-      this.sourceTokenContract = new Contract(
-        sourceToken,
-        tokenAbi,
-        this.owner
-      );
-      this.targetTokenContract = new Contract(
-        targetToken,
-        tokenAbi,
-        this.owner.connect(this.targetProvider)
-      );
+      const sourceTokenContract = new Contract(sourceToken, tokenAbi, this.owner.connect(sourceProvider));
+      const targetTokenContract = new Contract(targetToken, tokenAbi, this.owner.connect(targetProvider));
 
       const formattedAmount = ethers.parseEther(amount);
-
-      // Verify owner is validator
-      const isSourceValidator = await this.sourceChainBridge.validators(
-        this.owner.address
-      );
-      const isTargetValidator = await this.targetChainBridge.validators(
-        this.owner.address
-      );
-      if (!isSourceValidator || !isTargetValidator) {
-        throw new Error("Owner is not a validator");
-      }
-      if (
-        new Wallet(process.env.USER1_PK!, this.sourceProvider).address != sender
-      ) {
-        throw new Error("Private Key and Public Key mismatch");
-      }
-      // Check and handle token approval
-      console.log("Checking token allowance...");
-      console.log("Sender:", sender);
-
-      try {
-        const allowance = await (
-          this.sourceTokenContract.connect(this.sender) as Contract
-        ).allowance(sender, this.sourceChainBridge.target);
-        
-        if (allowance < formattedAmount) {
-          console.log("Approving tokens with signature...");
-          try {
-            const approveTx = await (
-              this.sourceTokenContract.connect(this.sender) as Contract
-            ).permit(
-              sender,
-              this.sourceChainBridge.target,
-              formattedAmount,
-              ethers.MaxUint256, // Deadline set to maximum
-              signature
-            );
-            
-            const receipt = await approveTx.wait();
-            if (!receipt.status) {
-              throw new Error("Token approval transaction failed");
-            }
-            console.log("Token approval successful");
-          } catch (approvalError: any) {
-            const errorMessage = approvalError?.message || "Unknown error during token approval";
-            if (errorMessage.includes("invalid signature")) {
-              throw new Error("Invalid signature provided for token approval");
-            } else if (errorMessage.includes("expired")) {
-              throw new Error("Token approval signature has expired");
-            } else if (errorMessage.toLowerCase().includes("user rejected")) {
-              throw new Error("User rejected the token approval transaction");
-            } else {
-              throw new Error(`Token approval failed: ${errorMessage}`);
-            }
-          }
-        }
-      } catch (error: any) {
-        console.error("Error during token approval process:", error);
-        throw error;
-      }
-
-      // Verify sender balance
-      const senderBalance = await this.sourceTokenContract.balanceOf(sender);
-      if (senderBalance < formattedAmount) {
-        throw new Error("Insufficient sender balance");
-      }
-
-      // Verify bridge liquidity
-      // const targetBridgeBalance = await this.targetTokenContract.balanceOf(
-      //   this.targetChainBridge.target
-      // );
-      // if (targetBridgeBalance < formattedAmount) {
-      //   throw new Error("Insufficient bridge liquidity");
-      // }
 
       // Lock tokens
       const nonce = await generateNonce(sender);
@@ -271,15 +236,13 @@ export class BridgeService {
         sourceToken,
         sender,
         recipient,
-        formattedAmount,
+        formattedAmount.toString(),
         nonce,
         sourceChainId,
         targetChainId
       );
 
-      const lockTx = await (
-        this.sourceChainBridge.connect(this.owner) as Contract
-      ).executeTokenOperation(
+      const lockTx = await sourceChainBridge.lockTokens(
         sourceToken,
         formattedAmount,
         sender,
@@ -288,113 +251,34 @@ export class BridgeService {
       );
 
       // Wait for lock event and confirmation
-      const [lockEvent, lockReceipt] = await Promise.all([
-        this.sourceEventService.waitForEvent("TokensLocked"),
-        lockTx.wait(),
-      ]);
-      console.log("Lock transaction completed:", lockReceipt.hash);
+      // const [lockEvent, lockReceipt] = await Promise.all([
+      //   sourceEventService.waitForEvent("TokensLocked"),
+      //   lockTx.wait(),
+      // ]);
+      console.log("Lock transaction completed:", lockTx.hash);
 
-      // Verify bridge received tokens
-      // const bridgeBalance = await this.sourceTokenContract.balanceOf(
-      //   this.sourceChainBridge.target
-      // );
-      // if (bridgeBalance < formattedAmount) {
-      //   throw new Error("Lock operation failed: Bridge did not receive tokens");
-      // }
-
-      // Release tokens
-      console.log("lock hash", lockReceipt.hash);
-      const releaseHash = await generateReleaseHash(
+      // Call releaseTokens to handle the release operation
+      const releaseResult = await this.releaseTokens({
         targetToken,
+        sourceChainId,
+        targetChainId,
+        amount,
         sender,
         recipient,
-        formattedAmount,
-        nonce,
-        lockReceipt.hash,
-        sourceChainId,
-        targetChainId
-      );
-      console.log("Release hash:", releaseHash);
-      // const targetOwner = this.owner.connect(this.targetProvider);
-      let releaseReceip = { hash: "" };
-      try {
-        // Add explicit gas estimation handling
-        await this.verifyReleaseState(
-          targetToken,
-          formattedAmount,
-          releaseHash,
-          recipient
-        );
-        const estimatedGas =
-          await this.targetChainBridge.executeTokenOperation.estimateGas(
-            targetToken,
-            formattedAmount,
-            recipient,
-            releaseHash,
-            false
-          );
-
-        const releaseTx = await this.targetChainBridge.executeTokenOperation(
-          targetToken,
-          formattedAmount,
-          recipient,
-          releaseHash,
-          false,
-          {
-            gasLimit: Math.ceil(Number(estimatedGas) * 1.2), // Add 20% buffer
-          }
-        );
-        const [releaseEvent, releaseReceipt] = await Promise.all([
-          this.targetEventService.waitForEvent("TokensReleased"),
-          releaseTx.wait(),
-        ]);
-        releaseReceip = releaseReceipt;
-      } catch (error) {
-        // Add specific error handling for gas estimation
-        if ((error as any).code === "UNPREDICTABLE_GAS_LIMIT") {
-          // Handle gas estimation failure
-          console.log("Gas estimation failed, trying with fixed gas limit");
-          // Try with fixed gas limit
-          const releaseTx = await this.targetChainBridge.executeTokenOperation(
-            targetToken,
-            formattedAmount,
-            recipient,
-            releaseHash,
-            false,
-            {
-              gasLimit: 500000, // Fixed gas limit
-            }
-          );
-        }
-        throw error;
-      }
-
-      // Wait for release event and confirmation
-
-      console.log("Release transaction completed:", releaseReceip.hash);
-
-      // Verify recipient received tokens
-      const recipientBalance = await this.targetTokenContract.balanceOf(
-        recipient
-      );
-      if (recipientBalance < formattedAmount) {
-        throw new Error(
-          "Release operation failed: Recipient did not receive tokens"
-        );
-      }
+        lockTxHash: lockTx.hash,
+      });
 
       return {
-        success: true,
-        sourceTxHash: lockReceipt.hash,
-        targetTxHash: releaseReceip.hash,
-        status: "COMPLETED",
+        success: releaseResult.success,
+        sourceTxHash: lockTx.hash,
+        targetTxHash: releaseResult.txHash,
+        status: releaseResult.status,
       };
     } catch (error) {
       console.error("Bridge operation failed:", error);
       return {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
+        error: error instanceof Error ? error.message : "Unknown error occurred",
         status: "FAILED",
       };
     } finally {
@@ -403,11 +287,11 @@ export class BridgeService {
   }
 
   public async destroy() {
-    await Promise.all([
-      this.sourceProvider.destroy(),
-      this.targetProvider.destroy(),
-      this.sourceEventService.destroy(),
-      this.targetEventService.destroy(),
-    ]);
+    await Promise.all(
+      Array.from(this.providers.values()).map((provider) => provider.destroy())
+    );
+    await Promise.all(
+      Array.from(this.eventServices.values()).map((service) => service.destroy())
+    );
   }
 }

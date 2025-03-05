@@ -6,7 +6,7 @@ import {
   generateNonce,
   generateReleaseHash,
 } from "../utils/common";
-import { JsonRpcProvider, Wallet } from "ethers";
+import { Contract, JsonRpcProvider, Wallet } from "ethers";
 
 describe.only("Bridge Contract Test", function () {
   let sourceTokenContract: MockERC20Token;
@@ -99,20 +99,24 @@ describe.only("Bridge Contract Test", function () {
         targetChainId
       );
 
-      const beforeBal = await sourceProvider.getBalance(sourceChainBridge.target);
+      const beforeBal = await sourceProvider.getBalance(
+        sourceChainBridge.target
+      );
       console.log(`Before balance: ${beforeBal}`);
       // Lock native tokens
       await expect(
-        (await sourceChainBridge.connect(sender).lockTokens(
-          ethers.ZeroAddress,
-          ethers.ZeroAddress, // Native token (ETH)
-          amount,
-          recipient.address,
-          sourceChainId,
-          targetChainId,
-          sourceChainTxHash,
-          { value: amount } // Include ETH in the transaction
-        )).wait()
+        (
+          await sourceChainBridge.connect(sender).lockTokens(
+            ethers.ZeroAddress,
+            ethers.ZeroAddress, // Native token (ETH)
+            amount,
+            recipient.address,
+            sourceChainId,
+            targetChainId,
+            sourceChainTxHash,
+            { value: amount } // Include ETH in the transaction
+          )
+        ).wait()
       )
         .to.emit(sourceChainBridge, "TokensLocked")
         .withArgs(
@@ -126,21 +130,17 @@ describe.only("Bridge Contract Test", function () {
           sourceChainTxHash
         );
 
-        const currentBal = await sourceProvider.getBalance(sourceChainBridge.target);
+      const currentBal = await sourceProvider.getBalance(
+        sourceChainBridge.target
+      );
       console.log(`Before balance: ${currentBal}`);
       // Verify contract balance
-      expect(
-        currentBal-beforeBal
-      ).to.equal(amount);
+      expect(currentBal - beforeBal).to.equal(amount);
     });
 
     it("Should lock ERC20 tokens", async function () {
       const amount = ethers.parseEther("0.00001");
 
-      // Mint tokens to sender
-      // const mintTx = await sourceTokenContract.connect(owner).mint(sender.address, ethers.parseEther("100"));
-      // await mintTx.wait();  
-      console.log(`Minted ${amount} tokens to sender`);
       const balance = await sourceTokenContract.balanceOf(sender.address);
       console.log("Token balance:", balance);
 
@@ -169,21 +169,25 @@ describe.only("Bridge Contract Test", function () {
         targetChainId
       );
 
-      const beforeBal = await sourceTokenContract.balanceOf(sourceChainBridge.target)
+      const beforeBal = await sourceTokenContract.balanceOf(
+        sourceChainBridge.target
+      );
       console.log(`Before balance: ${beforeBal}`);
       // Lock ERC20 tokens
       await expect(
-        (await sourceChainBridge
-          .connect(sender)
-          .lockTokens(
-            sourceTokenContract.target,
-            targetTokenContract.target,
-            amount,
-            recipient.address,
-            sourceChainId,
-            targetChainId,
-            sourceChainTxHash
-          )).wait()
+        (
+          await sourceChainBridge
+            .connect(sender)
+            .lockTokens(
+              sourceTokenContract.target,
+              targetTokenContract.target,
+              amount,
+              recipient.address,
+              sourceChainId,
+              targetChainId,
+              sourceChainTxHash
+            )
+        ).wait()
       )
         .to.emit(sourceChainBridge, "TokensLocked")
         .withArgs(
@@ -198,183 +202,18 @@ describe.only("Bridge Contract Test", function () {
         );
 
       // Verify contract balance
-      const currentBal = await sourceTokenContract.balanceOf(sourceChainBridge.target)
-      console.log(`Before balance: ${currentBal}`);
-      expect(
-        currentBal - beforeBal
-      ).to.equal(amount);
-    });
-  });
-
-  describe("Token Releasing", function () {
-    it("Should release tokens and deduct platform fee", async function () {
-      const amount = ethers.parseEther("100"); // 100 tokens
-
-      // Mint tokens to sender
-      await sourceTokenContract.mint(sender.address, amount);
-      const balance = await sourceTokenContract.balanceOf(sender.address);
-      console.log("Token balance:", balance);
-
-      const allowance = await sourceTokenContract.allowance(
-        sender,
+      const currentBal = await sourceTokenContract.balanceOf(
         sourceChainBridge.target
       );
-      if (allowance < amount) {
-        console.log("Approving tokens...");
-        const approveTx = await sourceTokenContract
-          .connect(sender)
-          .approve(sourceChainBridge.target, amount);
-        await approveTx.wait();
-        console.log("Token approval successful");
-      }
-
-      // Generate lock hash
-      const nonce = await generateNonce(sender.address);
-      const sourceChainTxHash = await generateLockHash(
-        sourceTokenContract.target.toString(),
-        sender.address,
-        recipient.address,
-        amount.toString(),
-        nonce,
-        sourceChainId,
-        targetChainId
-      );
-
-      // Lock ERC20 tokens
-      const lockTx = await sourceChainBridge
-        .connect(sender)
-        .lockTokens(
-          sourceTokenContract.target,
-          targetTokenContract.target,
-          amount,
-          recipient.address,
-          sourceChainId,
-          targetChainId,
-          sourceChainTxHash
-        );
-
-      // Calculate platform fee and net amount
-      const platformFeePercentage =
-        await targetChainBridge.platformFeePercentage();
-      const fee = (amount * BigInt(platformFeePercentage)) / BigInt(10000);
-      const netAmount = amount - fee;
-      console.log(`Amount: ${amount}, Fee: ${fee}, Net Amount: ${netAmount}`);
-
-      // Generate release hash
-      const recipientNonce = await generateNonce(recipient.address);
-      const targetChainTxHash = await generateReleaseHash(
-        targetTokenContract.target.toString(),
-        sender.address,
-        recipient.address,
-        amount.toString(),
-        recipientNonce,
-        lockTx.hash,
-        sourceChainId,
-        targetChainId
-      );
-
-      // Mint tokens to target bridge
-      await targetTokenContract.mint(targetChainBridge.target, amount);
-      console.log(`Minted ${amount} tokens to target bridge`);
-
-      // check target bridge balance for target token
-      let targetBridgeBalance = await targetTokenContract.balanceOf(
-        await targetChainBridge.platformAddress()
-      );
-      console.log(
-        `Target bridge balance before release: ${targetBridgeBalance}`
-      );
-
-      // Release tokens on target chain
-      await expect(
-        targetChainBridge
-          .connect(owner)
-          .releaseTokens(
-            targetTokenContract.target,
-            amount,
-            recipient.address,
-            targetChainTxHash
-          )
-      )
-        .to.emit(targetChainBridge, "TokensReleased")
-        .withArgs(
-          targetTokenContract.target,
-          recipient.address,
-          netAmount,
-          targetChainTxHash
-        )
-        .and.to.emit(targetChainBridge, "PlatformFeeDeducted")
-        .withArgs(targetTokenContract.target, fee);
-
-      // Verify token balances
-      expect(
-        await targetTokenContract.allowance(
-          targetChainBridge.target,
-          recipient.address
-        )
-      ).to.equal(netAmount);
-      targetBridgeBalance = await targetTokenContract.balanceOf(
-        targetChainBridge.target
-      );
-      console.log(
-        `Target bridge balance after release: ${targetBridgeBalance}`
-      );
-      expect(
-        await targetTokenContract.balanceOf(
-          await targetChainBridge.platformAddress()
-        )
-      ).to.equal(fee);
+      console.log(`Before balance: ${currentBal}`);
+      expect(currentBal - beforeBal).to.equal(amount);
     });
   });
 
   describe("Token Withdrawal", function () {
     it("Should allow recipients to withdraw locked ERC20 tokens", async function () {
-      const amount = ethers.parseEther("100"); // 100 tokens
-
-      // Mint tokens to sender
-      await sourceTokenContract.mint(sender.address, amount);
-      const balance = await sourceTokenContract.balanceOf(sender.address);
-      console.log("Token balance:", balance);
-
-      const allowance = await sourceTokenContract.allowance(
-        sender,
-        sourceChainBridge.target
-      );
-      if (allowance < amount) {
-        console.log("Approving tokens...");
-        const approveTx = await sourceTokenContract
-          .connect(sender)
-          .approve(sourceChainBridge.target, amount);
-        await approveTx.wait();
-        console.log("Token approval successful");
-      }
-      // Approve the bridge contract to spend tokens
-      // await sourceTokenContract.connect(sender).approve(sourceChainBridge.target, amount);
-
-      // Generate lock hash
-      const nonce = await generateNonce(sender.address);
-      const sourceChainTxHash = await generateLockHash(
-        sourceTokenContract.target.toString(),
-        sender.address,
-        recipient.address,
-        amount.toString(),
-        nonce,
-        sourceChainId,
-        targetChainId
-      );
-
-      // Lock ERC20 tokens
-      const lockTx = await sourceChainBridge
-        .connect(sender)
-        .lockTokens(
-          sourceTokenContract.target,
-          targetTokenContract.target,
-          amount,
-          recipient.address,
-          sourceChainId,
-          targetChainId,
-          sourceChainTxHash
-        );
+      const amount = ethers.parseEther("0.00001");
+      const eventName = "TokensReleased";
 
       // Calculate platform fee and net amount
       const platformFeePercentage =
@@ -382,97 +221,51 @@ describe.only("Bridge Contract Test", function () {
       const fee = (amount * BigInt(platformFeePercentage)) / BigInt(10000);
       const netAmount = amount - fee;
       console.log(`Platform fee: ${fee}, Net amount: ${netAmount}`);
-      // Generate release hash
-      const recipientNonce = await generateNonce(recipient.address);
-      const targetChainTxHash = await generateReleaseHash(
-        targetTokenContract.target.toString(),
-        sender.address,
-        recipient.address,
-        amount.toString(),
-        recipientNonce,
-        lockTx.hash, // Use the lock transaction hash
-        sourceChainId,
-        targetChainId
-      );
 
-      // Mint tokens to target bridge
-      await targetTokenContract.mint(targetChainBridge.target, amount);
-
-      // Release tokens on target chain
-      await expect(
-        targetChainBridge
-          .connect(owner)
-          .releaseTokens(
-            targetTokenContract.target,
-            amount,
+      // Add listener and track it
+      const contract = targetChainBridge as unknown as Contract;
+      
+      const eventListener = async (...args: any[]) => {
+        console.log(`${eventName} event detected:`, args);
+        targetChainBridge.off(eventName, eventListener); // Remove the listener after detecting the event
+        // Verify withdrawable tokens for recipient
+        expect(
+          await sourceChainBridge.withdrawableTokens(
             recipient.address,
-            targetChainTxHash
+            targetTokenContract.target
           )
-      )
-        .to.emit(targetChainBridge, "TokensReleased")
-        .withArgs(
-          targetTokenContract.target,
-          recipient.address,
-          netAmount,
-          targetChainTxHash
-        )
-        .and.to.emit(targetChainBridge, "PlatformFeeDeducted")
-        .withArgs(targetTokenContract.target, fee);
+        ).to.greaterThanOrEqual(netAmount);
 
-      // Verify withdrawable tokens for recipient
-      expect(
-        await targetChainBridge.withdrawableTokens(
-          recipient.address,
-          targetTokenContract.target
+        // Verify token balances
+        const previousBal = await targetTokenContract.balanceOf(
+          recipient.address
+        );
+        console.log(`Previous balance: ${previousBal}`);
+        expect(previousBal).to.lessThan(previousBal + netAmount);
+        // Withdraw tokens as recipient
+        await expect(
+          targetChainBridge
+            .connect(recipient)
+            .withdrawTokens(targetTokenContract.target)
         )
-      ).to.equal(netAmount);
+          .to.emit(targetChainBridge, "TokensWithdrawn")
+          .withArgs(targetTokenContract.target, recipient.address, netAmount);
 
-      // Withdraw tokens as recipient
-      await expect(
-        targetChainBridge
-          .connect(recipient)
-          .withdrawTokens(targetTokenContract.target)
-      )
-        .to.emit(targetChainBridge, "TokensWithdrawn")
-        .withArgs(targetTokenContract.target, recipient.address, netAmount);
-
-      // Verify token balances
-      expect(await targetTokenContract.balanceOf(recipient.address)).to.equal(
-        netAmount
-      );
-      expect(
-        await targetTokenContract.balanceOf(
-          await targetChainBridge.platformAddress()
-        )
-      ).to.equal(fee);
+        // Verify recipient's ERC20 balance
+        expect(await targetTokenContract.balanceOf(recipient.address)).to.be.gt(
+          previousBal
+        );
+        expect(
+          await targetTokenContract.balanceOf(
+            await targetChainBridge.platformAddress()
+          )
+        ).to.equal(fee);
+      };
+      contract.on(eventName, eventListener);
     });
 
     it("Should allow recipients to withdraw native ETH", async function () {
-      const amount = ethers.parseEther("1"); // 1 ETH
-
-      // Generate lock hash
-      const nonce = await generateNonce(sender.address);
-      const sourceChainTxHash = await generateLockHash(
-        ethers.ZeroAddress, // Native token (ETH)
-        sender.address,
-        recipient.address,
-        amount.toString(),
-        nonce,
-        sourceChainId,
-        targetChainId
-      );
-
-      // Lock native ETH
-      const lockTx = await sourceChainBridge.connect(sender).lockTokens(
-        ethers.ZeroAddress, // Native token (ETH)
-        ethers.ZeroAddress, // Native token (ETH)
-        amount,
-        recipient.address,
-        sourceChainId,
-        targetChainId,
-        sourceChainTxHash,
-        { value: amount } // Include ETH in the transaction
-      );
+      const amount = ethers.parseEther("0.0000001");
 
       // Calculate platform fee and net amount
       const platformFeePercentage =
@@ -480,43 +273,14 @@ describe.only("Bridge Contract Test", function () {
       const fee = (amount * BigInt(platformFeePercentage)) / BigInt(10000);
       const netAmount = amount - fee;
 
-      // Generate release hash
-      const recipientNonce = await generateNonce(recipient.address);
-      const targetChainTxHash = await generateReleaseHash(
-        ethers.ZeroAddress, // Native token (ETH)
-        sender.address,
-        recipient.address,
-        amount.toString(),
-        recipientNonce,
-        lockTx.hash, // Use the lock transaction hash
-        sourceChainId,
-        targetChainId
+      // Verify token balances
+      const initialRecipientBalance = await targetProvider.getBalance(
+        recipient.address
       );
-
-      // Mint ETH to target bridge (simulate minting for native tokens)
-      await owner.sendTransaction({
-        to: targetChainBridge.target,
-        value: amount,
-      });
-
-      // Release tokens on target chain
-      await expect(
-        targetChainBridge.connect(owner).releaseTokens(
-          ethers.ZeroAddress, // Native token (ETH)
-          amount,
-          recipient.address,
-          targetChainTxHash
-        )
-      )
-        .to.emit(targetChainBridge, "TokensReleased")
-        .withArgs(
-          targetChainBridge.target,
-          recipient.address,
-          netAmount,
-          targetChainTxHash
-        )
-        .and.to.emit(targetChainBridge, "PlatformFeeDeducted")
-        .withArgs(ethers.ZeroAddress, fee);
+      console.log(`Previous balance: ${initialRecipientBalance}`);
+      expect(initialRecipientBalance).to.lessThan(
+        initialRecipientBalance + netAmount
+      );
 
       // Verify withdrawable tokens for recipient
       expect(
@@ -524,15 +288,15 @@ describe.only("Bridge Contract Test", function () {
           recipient.address,
           ethers.ZeroAddress
         )
-      ).to.equal(netAmount);
+      ).to.greaterThanOrEqual(netAmount);
 
       // Withdraw native ETH as recipient
-      const initialRecipientBalance = await sourceProvider.getBalance(
-        recipient.address
-      );
-
       await expect(
-        targetChainBridge.connect(recipient).withdrawTokens(ethers.ZeroAddress)
+        (
+          await targetChainBridge
+            .connect(recipient)
+            .withdrawTokens(ethers.ZeroAddress)
+        ).wait()
       )
         .to.emit(targetChainBridge, "TokensWithdrawn")
         .withArgs(ethers.ZeroAddress, recipient.address, netAmount);

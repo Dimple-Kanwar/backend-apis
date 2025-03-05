@@ -89,7 +89,7 @@ export class BridgeService {
     targetToken: string;
     sourceChainId: number;
     targetChainId: number;
-    amount: string;
+    amount: bigint;
     sender: string;
     recipient: string;
     lockTxHash: string;
@@ -120,15 +120,13 @@ export class BridgeService {
       // Initialize target token contract
       const targetTokenContract = new Contract(targetToken, tokenAbi, this.owner.connect(targetProvider));
 
-      const formattedAmount = ethers.parseEther(amount);
-
       // Generate release hash
       const nonce = await generateNonce(sender);
       const releaseHash = await generateReleaseHash(
         targetToken,
         sender,
         recipient,
-        formattedAmount,
+        amount,
         nonce,
         lockTxHash,
         sourceChainId,
@@ -138,11 +136,15 @@ export class BridgeService {
 
       // Verify release state
       // await this.verifyReleaseState(targetChainId, targetToken, formattedAmount, releaseHash, recipient);
-
+      const recipientWithdrawalLimit_before = await targetChainBridge.withdrawableTokens(
+        recipient,
+        targetToken
+      );
+      console.log({recipientWithdrawalLimit_before});
       // Estimate gas for release operation
       const estimatedGas = await targetChainBridge.releaseTokens.estimateGas(
         targetToken,
-        formattedAmount,
+        amount,
         recipient,
         releaseHash
       );
@@ -150,30 +152,20 @@ export class BridgeService {
       // Execute release operation
       const releaseTx = await targetChainBridge.releaseTokens(
         targetToken,
-        formattedAmount,
+        amount,
         recipient,
         releaseHash,
         {
           gasLimit: Math.ceil(Number(estimatedGas) * 1.2), // Add 20% buffer
         }
       );
+      const receipt = await releaseTx.wait();
 
-      // // Wait for release event and confirmation
-      // const [releaseEvent, releaseReceipt] = await Promise.all([
-      //   targetEventService.waitForEvent("TokensReleased"),
-      //   releaseTx.wait(),
-      // ]);
-      console.log("Release transaction completed:", releaseTx.hash);
-
-      // Verify recipient received tokens
-      const recipientBalance = await targetTokenContract.balanceOf(recipient);
-      if (recipientBalance < formattedAmount) {
-        throw new Error("Release operation failed: Recipient did not receive tokens");
-      }
-
+      console.log("Release transaction completed:", receipt.hash);
+      
       return {
         success: true,
-        txHash: releaseTx.hash,
+        txHash: receipt.hash,
         status: "COMPLETED",
       };
     } catch (error) {
@@ -262,7 +254,7 @@ export class BridgeService {
         targetToken,
         sourceChainId,
         targetChainId,
-        amount,
+        amount: formattedAmount,
         sender,
         recipient,
         lockTxHash: lockTx.hash,

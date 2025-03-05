@@ -82,16 +82,30 @@ export class BridgeEventService {
               targetChainId,
               lockHash,
             ] = eventArgs;
-            console.log({sourceToken, targetToken, lockedAmount, sender, recipient, sourceChainId, targetChainId, lockHash});
+            console.log({
+              sourceToken,
+              targetToken,
+              lockedAmount,
+              sender,
+              recipient,
+              sourceChainId,
+              targetChainId,
+              lockHash,
+            });
             // Compute the tokens to be released using a conversion rate
             const conversionRate = this.getConversionRate(
               sourceToken,
               targetToken
             );
             // Scale the conversion rate to match the token's smallest unit (e.g., 10^18 for 18 decimals)
-            const scaledConversionRate = BigInt(Math.floor(conversionRate * 1e18));
-            const releaseAmount: bigint = (lockedAmount * scaledConversionRate) / BigInt(1e18);
-            console.log(`Computed release amount: ${releaseAmount.toString()} tokens`);
+            const scaledConversionRate = BigInt(
+              Math.floor(conversionRate * 1e18)
+            );
+            const releaseAmount: bigint =
+              (lockedAmount * scaledConversionRate) / BigInt(1e18);
+            console.log(
+              `Computed release amount: ${releaseAmount.toString()} tokens`
+            );
 
             // Initialize BridgeService
             const bridgeService = new BridgeService();
@@ -101,7 +115,7 @@ export class BridgeEventService {
               targetToken: sourceToken,
               sourceChainId, // Replace with actual source chain ID
               targetChainId, // Replace with actual target chain ID
-              amount: releaseAmount.toString(),
+              amount: releaseAmount,
               sender: sender,
               recipient: recipient,
               lockTxHash: lockHash,
@@ -115,6 +129,15 @@ export class BridgeEventService {
         this.waitForEvent(contract, "TokensReleased", (eventArgs: any[]) => {
           console.log("TokensReleased event detected:", eventArgs);
         });
+
+        // Wait for lock event and confirmation
+        this.waitForEvent(
+          contract,
+          "PlatformFeeDeducted",
+          (eventArgs: any[]) => {
+            console.log("PlatformFeeDeducted event detected:", eventArgs);
+          }
+        );
       }
 
       console.log(
@@ -150,9 +173,9 @@ export class BridgeEventService {
 
   private getConversionRate(sourceToken: string, targetToken: string): number {
     // Construct a unique key for the conversion rate lookup
-    console.log({sourceToken, targetToken});
+    console.log({ sourceToken, targetToken });
     const rateKey = `${sourceToken}-${targetToken}`;
-console.log({rateKey}); 
+    console.log({ rateKey });
     // Fetch the conversion rate
     const rate = this.CONVERSION_RATES[rateKey];
 

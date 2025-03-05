@@ -104,11 +104,15 @@ export class BridgeService {
         lockTxHash,
         sourceChainId,
       } = request;
+      const targetRPC = CHAIN_CONFIGS[targetChainId].rpcUrl;
+      console.log({targetRPC});
+      const targetBridgeAddress = CHAIN_CONFIGS[targetChainId].bridgeAddress;
+      console.log({targetBridgeAddress}); 
       const targetProvider = new ethers.JsonRpcProvider(
-        process.env.SEPOLIA_TESTNET_RPC!
+        targetRPC
       );
       console.log({targetProvider});
-      const targetChainBridge =  new Contract(process.env.SEPOLIA_BRIDGE_ADDRESS!, bridgeAbi, this.owner.connect(targetProvider)); 
+      const targetChainBridge =  new Contract(targetBridgeAddress, bridgeAbi, this.owner.connect(targetProvider)); 
       
       console.log({targetChainBridge});
       // const targetEventService = this.eventServices.get(targetChainId);

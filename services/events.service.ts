@@ -16,7 +16,7 @@ export class BridgeEventService {
   private activeListeners: Map<string, Listener>;
   private reconnectAttempts: number;
   private readonly MAX_RECONNECT_ATTEMPTS = 5;
-  private readonly TIMEOUT = 120000; // 2 minutes timeout
+  private readonly TIMEOUT = 180000; // 2 minutes timeout
 
   // Hardcoded conversion rates for tokens between Base Sepolia and Sepolia
   private readonly CONVERSION_RATES: { [tokenPair: string]: number } = {

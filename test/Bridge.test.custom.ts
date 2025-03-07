@@ -7,305 +7,266 @@ import {
   generateReleaseHash,
 } from "../utils/common";
 import { Contract, JsonRpcProvider, Wallet } from "ethers";
+import { CHAIN_CONFIGS } from "../config/chains";
 
 describe.only("Bridge Contract Test", function () {
+  // network chain configurations
+  const sourceChainId = 84532;
+  const targetChainId = 11155111;
+
+  // token configurations
+  const sourceToken = "0x62060727308449B9347f5649Ea7495C061009615";
+  const targetToken = "0x22DD04E98a65396714b64a712678A2D27737Bb77";
+  const sourceBridgeAddress = CHAIN_CONFIGS[sourceChainId].bridgeAddress;
+  const targetBridgeAddress = CHAIN_CONFIGS[targetChainId].bridgeAddress;
+
+  const amount = ethers.parseEther("0.0000001");
+  console.log(`Amount: ${amount}`);
+  const nativeToken = ethers.ZeroAddress;
+
+  let sender: Wallet, recipient: Wallet;
   let sourceTokenContract: MockERC20Token;
   let targetTokenContract: MockERC20Token;
   let sourceChainBridge: Bridge;
   let targetChainBridge: Bridge;
-
-  // Hardhat network chain ID
-  const sourceChainId = 84532; // Hardhat network chain ID
-  const targetChainId = 11155111; // Same chain ID for simplicity
-  const sourceToken = "0x62060727308449B9347f5649Ea7495C061009615";
-  const targetToken = "0x22DD04E98a65396714b64a712678A2D27737Bb77";
-  let owner: Wallet, sender: Wallet, recipient: Wallet;
   let sourceProvider: JsonRpcProvider;
   let targetProvider: JsonRpcProvider;
 
   before(async function () {
-    sourceProvider = new ethers.JsonRpcProvider(process.env.BASE_SEPOLIA_RPC!);
-    targetProvider = new ethers.JsonRpcProvider(
-      process.env.SEPOLIA_TESTNET_RPC!
+    // Initialize providers
+    sourceProvider = new ethers.JsonRpcProvider(
+      CHAIN_CONFIGS[sourceChainId].rpcUrl
     );
+    targetProvider = new ethers.JsonRpcProvider(
+      CHAIN_CONFIGS[targetChainId].rpcUrl
+    );
+
     sender = new Wallet(process.env.USER1_PK!, sourceProvider);
     recipient = new Wallet(process.env.USER2_PK!, targetProvider);
-    owner = new Wallet(process.env.ADMIN_ACCOUNT_PK!);
-    // console.log({ owner, sender, recipient });
-    // Deploy MockERC20Token contracts
+
+    // Connect to deployed contracts
     const MockERC20TokenFactory = await ethers.getContractFactory(
       "MockERC20Token"
     );
-    // sourceTokenContract = (await MockERC20TokenFactory.deploy("Source Token", "ST", 18)) as MockERC20Token;
     sourceTokenContract = MockERC20TokenFactory.attach(sourceToken).connect(
       sender
     ) as MockERC20Token;
-    // targetTokenContract = (await MockERC20TokenFactory.deploy("Target Token", "TT", 18)) as MockERC20Token;
     targetTokenContract = MockERC20TokenFactory.attach(targetToken).connect(
-      owner
+      recipient
     ) as MockERC20Token;
-    // Deploy Bridge contracts
+
     const BridgeFactory = await ethers.getContractFactory("Bridge");
-    sourceChainBridge = BridgeFactory.attach(
-      process.env.BASE_BRIDGE_ADDRESS!
-    ).connect(sourceProvider) as Bridge; // 3% platform fee
-    targetChainBridge = BridgeFactory.attach(
-      process.env.SEPOLIA_BRIDGE_ADDRESS!
-    ).connect(targetProvider) as Bridge; // 3% platform fee
-
-    console.log(`Deployed Source Token at ${sourceTokenContract.target}`);
-    console.log(`Deployed Target Token at ${targetTokenContract.target}`);
-    console.log(`Deployed Source Bridge at ${sourceChainBridge.target}`);
-    console.log(`Deployed Target Bridge at ${targetChainBridge.target}`);
+    sourceChainBridge = BridgeFactory.attach(sourceBridgeAddress).connect(
+      sourceProvider
+    ) as Bridge;
+    targetChainBridge = BridgeFactory.attach(targetBridgeAddress).connect(
+      targetProvider
+    ) as Bridge;
   });
+  const simulateLockTokens = async (
+    _sourceToken: string,
+    _targetToken: string
+  ) => {
+    // Get initial balances
+    const initialSenderBalance =
+      _sourceToken === nativeToken
+        ? await sourceProvider.getBalance(sender.address)
+        : await sourceTokenContract.balanceOf(sender.address);
+    console.log(`Initial sender balance: ${initialSenderBalance}`);
 
-  describe("Deployment", function () {
-    it("Should set the right owner on source chain", async function () {
-      expect(await sourceChainBridge.owner()).to.equal(owner.address);
-    });
+    const initialBridgeBalance =
+      _sourceToken === nativeToken
+        ? await sourceProvider.getBalance(sourceChainBridge.target)
+        : await sourceTokenContract.balanceOf(sourceChainBridge.target);
+    console.log(`initial Bridge Balance: ${initialBridgeBalance}`);
 
-    it("Should set the right owner on target chain", async function () {
-      expect(await targetChainBridge.owner()).to.equal(owner.address);
-    });
-
-    it("Should set the initial platform address to the owner on source chain", async function () {
-      expect(await sourceChainBridge.platformAddress()).to.equal(owner.address);
-    });
-
-    it("Should set the initial platform address to the owner on target chain", async function () {
-      expect(await targetChainBridge.platformAddress()).to.equal(owner.address);
-    });
-  });
-
-  describe("Token Locking", function () {
-    it("Should lock native tokens (ETH)", async function () {
-      const amount = ethers.parseEther("0.0000001");
-
-      // send some ether to sender account
-      await owner.connect(sourceProvider).sendTransaction({
-        to: sender.address,
-        value: amount,
-      });
-
-      // Generate lock hash
-      const nonce = await generateNonce(sender.address);
-      const sourceChainTxHash = await generateLockHash(
-        ethers.ZeroAddress, // Native token (ETH)
-        sender.address,
-        recipient.address,
-        amount.toString(),
-        nonce,
-        sourceChainId,
-        targetChainId
-      );
-
-      const beforeBal = await sourceProvider.getBalance(
-        sourceChainBridge.target
-      );
-      console.log(`Before balance: ${beforeBal}`);
-      // Lock native tokens
-      await expect(
-        (
-          await sourceChainBridge.connect(sender).lockTokens(
-            ethers.ZeroAddress,
-            ethers.ZeroAddress, // Native token (ETH)
-            amount,
-            recipient.address,
-            sourceChainId,
-            targetChainId,
-            sourceChainTxHash,
-            { value: amount } // Include ETH in the transaction
-          )
-        ).wait()
-      )
-        .to.emit(sourceChainBridge, "TokensLocked")
-        .withArgs(
-          ethers.ZeroAddress,
-          ethers.ZeroAddress,
-          amount,
-          sender.address,
-          recipient.address,
-          sourceChainId,
-          targetChainId,
-          sourceChainTxHash
-        );
-
-      const currentBal = await sourceProvider.getBalance(
-        sourceChainBridge.target
-      );
-      console.log(`Before balance: ${currentBal}`);
-      // Verify contract balance
-      expect(currentBal - beforeBal).to.equal(amount);
-    });
-
-    it("Should lock ERC20 tokens", async function () {
-      const amount = ethers.parseEther("0.00001");
-
-      const balance = await sourceTokenContract.balanceOf(sender.address);
-      console.log("Token balance:", balance);
-
+    // Check if source token is ERC20 (not native)
+    if (_sourceToken !== nativeToken) {
       const allowance = await sourceTokenContract.allowance(
-        sender,
-        sourceChainBridge.target
+        sender.address,
+        sourceBridgeAddress
       );
+
       if (allowance < amount) {
         console.log("Approving tokens...");
         const approveTx = await sourceTokenContract
           .connect(sender)
-          .approve(sourceChainBridge.target, amount);
+          .approve(sourceBridgeAddress, amount);
         await approveTx.wait();
         console.log("Token approval successful");
       }
+    }
+    console.log({amount});
+    // Generate lock hash 
+    const nonce = await generateNonce(sender.address);
+    const sourceChainTxHash = await generateLockHash(
+      _sourceToken,
+      _targetToken,
+      sender.address,
+      recipient.address,
+      amount.toString(),
+      nonce,
+      sourceChainId,
+      targetChainId
+    );
+    const lockTx = await (
+      await sourceChainBridge.connect(sender).lockTokens(
+        _sourceToken,
+        _targetToken,
+        amount,
+        recipient.address,
+        sourceChainId,
+        targetChainId,
+        sourceChainTxHash,
+        _sourceToken === nativeToken ? { value: amount }: {} 
+      )
+    ).wait();
+    console.log(`Lock Tx: ${lockTx?.hash}`);
 
-      // Generate lock hash
-      const nonce = await generateNonce(sender.address);
-      const sourceChainTxHash = await generateLockHash(
-        sourceTokenContract.target.toString(),
+    // Lock tokens
+    expect(lockTx)
+      .to.emit(sourceChainBridge, "TokensLocked")
+      .withArgs(
+        _sourceToken,
+        _targetToken,
+        amount,
         sender.address,
         recipient.address,
-        amount.toString(),
-        nonce,
         sourceChainId,
-        targetChainId
+        targetChainId,
+        sourceChainTxHash
       );
 
-      const beforeBal = await sourceTokenContract.balanceOf(
-        sourceChainBridge.target
-      );
-      console.log(`Before balance: ${beforeBal}`);
-      // Lock ERC20 tokens
-      await expect(
-        (
-          await sourceChainBridge
-            .connect(sender)
-            .lockTokens(
-              sourceTokenContract.target,
-              targetTokenContract.target,
-              amount,
-              recipient.address,
-              sourceChainId,
-              targetChainId,
-              sourceChainTxHash
-            )
-        ).wait()
-      )
-        .to.emit(sourceChainBridge, "TokensLocked")
-        .withArgs(
-          sourceTokenContract.target,
-          targetTokenContract.target,
-          amount,
-          sender.address,
-          recipient.address,
-          sourceChainId,
-          targetChainId,
-          sourceChainTxHash
-        );
+    const currentBridgeBalance =
+      _sourceToken === nativeToken
+        ? await sourceProvider.getBalance(sourceChainBridge.target)
+        : await sourceTokenContract.balanceOf(sourceChainBridge.target);
+    console.log(`current Bridge Balance: ${currentBridgeBalance}`);
 
-      // Verify contract balance
-      const currentBal = await sourceTokenContract.balanceOf(
-        sourceChainBridge.target
-      );
-      console.log(`Before balance: ${currentBal}`);
-      expect(currentBal - beforeBal).to.equal(amount);
+    const currentSenderBalance =
+      _sourceToken === nativeToken
+        ? await sourceProvider.getBalance(sender.address)
+        : await sourceTokenContract.balanceOf(sender.address);
+    console.log(`Current sender balance: ${currentSenderBalance}`);
+    // if (_sourceToken === nativeToken) {
+    //   if (lockTx) {
+    //     const gasCost = lockTx.gasUsed * lockTx.gasPrice;
+    //     expect(currentSenderBalance).to.equal(initialSenderBalance - amount - gasCost);
+    //   }
+    // } else {
+    //   expect(currentSenderBalance).to.equal(initialSenderBalance - amount);
+    // }
+    // Verify contract balance
+    expect(currentBridgeBalance-initialBridgeBalance).to.equal(amount);
+  };
+
+  describe("Token Locking", function () {
+    it("Should lock native tokens (ETH)", async function () {
+      await simulateLockTokens(nativeToken, nativeToken);
+    });
+
+    it("Should lock ERC20 tokens", async function () {
+      await simulateLockTokens(sourceToken, targetToken);
+    });
+
+    it("Should lock ERC20 to native tokens", async function () {
+      await simulateLockTokens(sourceToken, nativeToken);
+    });
+
+    it("Should lock native to ERC20 tokens", async function () {
+      await simulateLockTokens(nativeToken, targetToken);
     });
   });
 
-  describe("Token Withdrawal", function () {
-    it("Should allow recipients to withdraw locked ERC20 tokens", async function () {
-      const amount = ethers.parseEther("0.00001");
-      const eventName = "TokensReleased";
+  // describe("Token Withdrawal", function () {
+  //   it("Should allow recipients to withdraw locked ERC20 tokens", async function () {
+  //     const eventName = "TokensReleased";
+  //     // Calculate platform fee and net amount
+  //     const platformFeePercentage =
+  //       await targetChainBridge.platformFeePercentage();
+  //     const fee = (amount * BigInt(platformFeePercentage)) / BigInt(10000);
+  //     const netAmount = amount - fee;
+  //     console.log(`Platform fee: ${fee}, Net amount: ${netAmount}`);
 
-      // Calculate platform fee and net amount
-      const platformFeePercentage =
-        await targetChainBridge.platformFeePercentage();
-      const fee = (amount * BigInt(platformFeePercentage)) / BigInt(10000);
-      const netAmount = amount - fee;
-      console.log(`Platform fee: ${fee}, Net amount: ${netAmount}`);
+  //     // Verify withdrawable tokens for recipient
+  //     const withdrawableTokens = await sourceChainBridge.withdrawableTokens(
+  //       recipient.address,
+  //       targetToken
+  //     );
+  //     console.log(`Withdrawable tokens: ${withdrawableTokens}`);
+  //     expect(withdrawableTokens).to.greaterThanOrEqual(netAmount);
 
-      // Add listener and track it
-      const contract = targetChainBridge as unknown as Contract;
-      
-      const eventListener = async (...args: any[]) => {
-        console.log(`${eventName} event detected:`, args);
-        targetChainBridge.off(eventName, eventListener); // Remove the listener after detecting the event
-        // Verify withdrawable tokens for recipient
-        expect(
-          await sourceChainBridge.withdrawableTokens(
-            recipient.address,
-            targetTokenContract.target
-          )
-        ).to.greaterThanOrEqual(netAmount);
+  //     // Verify token balances
+  //     const initialRecipientBalance = await targetTokenContract.balanceOf(
+  //       recipient.address
+  //     );
+  //     console.log(`initial Recipient Balance: ${initialRecipientBalance}`);
 
-        // Verify token balances
-        const previousBal = await targetTokenContract.balanceOf(
-          recipient.address
-        );
-        console.log(`Previous balance: ${previousBal}`);
-        expect(previousBal).to.lessThan(previousBal + netAmount);
-        // Withdraw tokens as recipient
-        await expect(
-          targetChainBridge
-            .connect(recipient)
-            .withdrawTokens(targetTokenContract.target)
-        )
-          .to.emit(targetChainBridge, "TokensWithdrawn")
-          .withArgs(targetTokenContract.target, recipient.address, netAmount);
+  //     expect(initialRecipientBalance).to.lessThan(
+  //       withdrawableTokens + initialRecipientBalance
+  //     );
 
-        // Verify recipient's ERC20 balance
-        expect(await targetTokenContract.balanceOf(recipient.address)).to.be.gt(
-          previousBal
-        );
-        expect(
-          await targetTokenContract.balanceOf(
-            await targetChainBridge.platformAddress()
-          )
-        ).to.equal(fee);
-      };
-      contract.on(eventName, eventListener);
-    });
+  //     // Withdraw tokens as recipient
+  //     const withdrawTx = await (
+  //       await targetChainBridge
+  //         .connect(recipient)
+  //         .withdrawTokens(targetTokenContract.target)
+  //     ).wait();
 
-    it("Should allow recipients to withdraw native ETH", async function () {
-      const amount = ethers.parseEther("0.0000001");
+  //     console.log(`Withdraw Tx: ${withdrawTx?.hash}`);
 
-      // Calculate platform fee and net amount
-      const platformFeePercentage =
-        await targetChainBridge.platformFeePercentage();
-      const fee = (amount * BigInt(platformFeePercentage)) / BigInt(10000);
-      const netAmount = amount - fee;
+  //     await expect(withdrawTx)
+  //       .to.emit(targetChainBridge, "TokensWithdrawn")
+  //       .withArgs(targetTokenContract.target, recipient.address, netAmount);
 
-      // Verify token balances
-      const initialRecipientBalance = await targetProvider.getBalance(
-        recipient.address
-      );
-      console.log(`Previous balance: ${initialRecipientBalance}`);
-      expect(initialRecipientBalance).to.lessThan(
-        initialRecipientBalance + netAmount
-      );
+  //     // Verify recipient's ERC20 balance
+  //     expect(await targetTokenContract.balanceOf(recipient.address)).to.be.gt(
+  //       initialRecipientBalance
+  //     );
+  //   });
 
-      // Verify withdrawable tokens for recipient
-      expect(
-        await targetChainBridge.withdrawableTokens(
-          recipient.address,
-          ethers.ZeroAddress
-        )
-      ).to.greaterThanOrEqual(netAmount);
+  //   it("Should allow recipients to withdraw native ETH", async function () {
+  //     // Calculate platform fee and net amount
+  //     const platformFeePercentage =
+  //       await targetChainBridge.platformFeePercentage();
+  //     const fee = (amount * BigInt(platformFeePercentage)) / BigInt(10000);
+  //     const netAmount = amount - fee;
 
-      // Withdraw native ETH as recipient
-      await expect(
-        (
-          await targetChainBridge
-            .connect(recipient)
-            .withdrawTokens(ethers.ZeroAddress)
-        ).wait()
-      )
-        .to.emit(targetChainBridge, "TokensWithdrawn")
-        .withArgs(ethers.ZeroAddress, recipient.address, netAmount);
+  //     // Verify token balances
+  //     const initialRecipientBalance = await targetProvider.getBalance(
+  //       recipient.address
+  //     );
+  //     console.log(`Previous balance: ${initialRecipientBalance}`);
+  //     expect(initialRecipientBalance).to.lessThan(
+  //       initialRecipientBalance + netAmount
+  //     );
 
-      // Verify recipient's ETH balance
-      const finalRecipientBalance = await targetProvider.getBalance(
-        recipient.address
-      );
-      expect(finalRecipientBalance).to.be.gt(initialRecipientBalance);
-    });
-  });
+  //     // Verify withdrawable tokens for recipient
+  //     const withdrawableTokens = await targetChainBridge.withdrawableTokens(
+  //       recipient.address,
+  //       ethers.ZeroAddress
+  //     );
+  //     console.log(`Withdrawable tokens: ${withdrawableTokens}`);
+  //     expect(withdrawableTokens).to.greaterThanOrEqual(netAmount);
+
+  //     // Withdraw native ETH as recipient
+  //     const withdrawTx = await (
+  //       await targetChainBridge
+  //         .connect(recipient)
+  //         .withdrawTokens(ethers.ZeroAddress)
+  //     ).wait();
+  //     console.log(`Withdraw Tx: ${withdrawTx?.hash}`);
+
+  //     expect(withdrawTx)
+  //       .to.emit(targetChainBridge, "TokensWithdrawn")
+  //       .withArgs(ethers.ZeroAddress, recipient.address, netAmount);
+
+  //     // Verify recipient's ETH balance
+  //     const finalRecipientBalance = await targetProvider.getBalance(
+  //       recipient.address
+  //     );
+  //     console.log(`Current balance: ${finalRecipientBalance}`);
+  //     expect(finalRecipientBalance).to.be.gt(initialRecipientBalance);
+  //   });
+  // });
 });

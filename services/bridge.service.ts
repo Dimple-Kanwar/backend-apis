@@ -105,17 +105,12 @@ export class BridgeService {
         sourceChainId,
       } = request;
       const targetRPC = CHAIN_CONFIGS[targetChainId].rpcUrl;
-      console.log({targetRPC});
       const targetBridgeAddress = CHAIN_CONFIGS[targetChainId].bridgeAddress;
-      console.log({targetBridgeAddress}); 
       const targetProvider = new ethers.JsonRpcProvider(
         targetRPC
       );
-      console.log({targetProvider});
       const targetChainBridge =  new Contract(targetBridgeAddress, bridgeAbi, this.owner.connect(targetProvider)); 
       
-      console.log({targetChainBridge});
-      // const targetEventService = this.eventServices.get(targetChainId);
 
       if (!targetProvider || !targetChainBridge) {
         throw new Error(`Target Chain ID ${targetChainId} not supported`);
@@ -166,7 +161,11 @@ export class BridgeService {
       const receipt = await releaseTx.wait();
 
       console.log("Release transaction completed:", receipt.hash);
-      
+      const recipientWithdrawalLimit_after = await targetChainBridge.withdrawableTokens(
+        recipient,
+        targetToken
+      );
+      console.log({recipientWithdrawalLimit_after});
       return {
         success: true,
         txHash: receipt.hash,
@@ -230,6 +229,7 @@ export class BridgeService {
       const nonce = await generateNonce(sender);
       const targetChainTxHash = await generateLockHash(
         sourceToken,
+        targetToken,
         sender,
         recipient,
         formattedAmount.toString(),

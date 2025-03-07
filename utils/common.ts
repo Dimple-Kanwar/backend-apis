@@ -2,7 +2,8 @@ import { ethers } from "ethers";
 
 // Generate hash for locking tokens
 export const generateLockHash = async(
-    token: string,
+    sourceToken: string,
+    targetToken: string,
     sender: string,
     recipient: string,
     amount: string,
@@ -10,8 +11,9 @@ export const generateLockHash = async(
     sourceChainId: number,
     targetChainId: number
 ) => {
-    return ethers.solidityPackedKeccak256(['address', 'address', 'address', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256'], [
-        token,
+    return ethers.solidityPackedKeccak256(['address', 'address','address', 'address', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256'], [
+        sourceToken,
+        targetToken,
         sender,
         recipient,
         ethers.parseEther(amount),
